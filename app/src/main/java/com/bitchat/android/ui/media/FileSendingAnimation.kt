@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.bitchat.android.ui.theme.BitchatFontFamily
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 import kotlinx.coroutines.delay
 
 /**

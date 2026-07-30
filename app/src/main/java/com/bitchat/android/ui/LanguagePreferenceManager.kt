@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.annotation.XmlRes
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 import org.xmlpull.v1.XmlPullParser
 import java.util.Locale
 

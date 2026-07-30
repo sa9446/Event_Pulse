@@ -19,7 +19,7 @@ import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.content.LocusIdCompat
 import androidx.core.graphics.drawable.IconCompat
 import com.bitchat.android.MainActivity
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 import com.bitchat.android.service.ConversationNotificationReceiver
 import com.bitchat.android.services.ContactDirectory
 import com.bitchat.android.services.ConversationListPreferences

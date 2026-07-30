@@ -18,7 +18,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.bitchat.android.ui.theme.BitchatFontFamily
 import com.bitchat.android.ui.theme.colorForPeer
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 import com.bitchat.android.ui.theme.LocalBitchatPalette
 import java.util.*
 

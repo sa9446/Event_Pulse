@@ -16,7 +16,7 @@ import com.bitchat.android.core.ui.component.sheet.BitchatSheetTopBar
 import com.bitchat.android.core.ui.component.sheet.BitchatSheetTitle
 import com.bitchat.android.geohash.GeohashChannelLevel
 import com.bitchat.android.geohash.LocationChannelManager
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 
 /**
  * Presenter component for LocationNotesSheet

@@ -15,7 +15,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import com.bitchat.android.MainActivity
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 
 internal enum class PeerAvailabilityAction {
     NONE,

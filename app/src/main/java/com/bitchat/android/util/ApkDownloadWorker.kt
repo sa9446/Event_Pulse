@@ -12,7 +12,7 @@ import androidx.work.Data
 import androidx.work.ForegroundInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 
 /**
  * WorkManager worker that downloads the universal APK in the background.

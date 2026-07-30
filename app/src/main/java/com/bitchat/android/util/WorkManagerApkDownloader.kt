@@ -3,7 +3,7 @@ package com.bitchat.android.util
 import android.content.Context
 import androidx.work.Constraints
 import androidx.work.BackoffPolicy
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder

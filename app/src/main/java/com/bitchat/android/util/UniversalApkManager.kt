@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
-import com.bitchat.android.BuildConfig
+import com.eventpulse.mesh.BuildConfig
 import com.bitchat.android.net.OkHttpProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers

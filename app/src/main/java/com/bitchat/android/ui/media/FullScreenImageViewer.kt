@@ -34,7 +34,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.res.stringResource
 import com.bitchat.android.ui.theme.BitchatFontFamily
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 import java.io.File
 
 /**

@@ -42,7 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bitchat.android.ui.theme.BitchatFontFamily
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 import com.bitchat.android.core.ui.icon.BitChatIcon
 import com.bitchat.android.ui.theme.BitchatMotion
 import com.bitchat.android.ui.theme.LocalBitchatPalette

@@ -74,7 +74,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bitchat.android.ui.theme.BitchatFontFamily
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 import com.bitchat.android.core.ui.component.text.AnnotatedClickableText
 import com.bitchat.android.mesh.MeshService
 import com.bitchat.android.model.BitchatMessage

@@ -16,7 +16,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.bitchat.android.MainActivity
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 import com.bitchat.android.mesh.BluetoothMeshService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

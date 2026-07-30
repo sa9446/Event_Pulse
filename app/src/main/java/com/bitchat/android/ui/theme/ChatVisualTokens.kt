@@ -8,7 +8,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 
 /**
  * The bundled Geist Mono family used throughout the app.

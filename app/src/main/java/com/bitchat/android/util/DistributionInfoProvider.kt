@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
-import com.bitchat.android.BuildConfig
+import com.eventpulse.mesh.BuildConfig
 import java.io.File
 import java.security.MessageDigest
 import java.util.zip.ZipFile

@@ -7,7 +7,7 @@ import android.os.Build
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.content.ContextCompat
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 
 /**
  * Centralized permission management for bitchat app

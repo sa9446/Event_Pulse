@@ -59,7 +59,7 @@ import com.bitchat.android.nostr.geohashesForSampling
 import com.bitchat.android.ui.theme.BASE_FONT_SIZE
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 import com.bitchat.android.core.ui.component.sheet.BitchatBottomSheet
 import com.bitchat.android.core.ui.component.sheet.BitchatSheetTitle
 import com.bitchat.android.core.ui.component.sheet.LocalSheetDismiss

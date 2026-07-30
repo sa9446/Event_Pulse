@@ -1,7 +1,7 @@
 package com.bitchat.android.ui
 
 import android.content.Context
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 import com.bitchat.android.favorites.FavoritesPersistenceService
 import com.bitchat.android.identity.SecureIdentityStateManager
 import com.bitchat.android.mesh.MeshService

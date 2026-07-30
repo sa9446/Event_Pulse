@@ -15,7 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 import com.bitchat.android.features.file.FileUtils
 
 @Composable

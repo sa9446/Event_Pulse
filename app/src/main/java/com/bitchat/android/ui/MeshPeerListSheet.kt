@@ -5,7 +5,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import com.bitchat.android.ui.theme.BitchatFontFamily
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 import android.text.format.DateUtils
 import android.util.Log
 import androidx.compose.animation.AnimatedVisibility

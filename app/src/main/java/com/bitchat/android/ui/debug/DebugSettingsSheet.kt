@@ -38,7 +38,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.res.stringResource
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 import androidx.compose.ui.platform.LocalContext
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult

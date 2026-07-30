@@ -50,7 +50,7 @@ import com.bitchat.android.ui.theme.BitchatFontFamily
 import androidx.annotation.DrawableRes
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.RowScope
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 import com.bitchat.android.core.ui.component.button.BitChatBrandButton
 import com.bitchat.android.core.ui.component.button.CloseButton
 import com.bitchat.android.net.ArtiTorManager

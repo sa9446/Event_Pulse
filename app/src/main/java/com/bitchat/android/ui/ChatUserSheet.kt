@@ -13,7 +13,7 @@ import com.bitchat.android.ui.theme.BitchatFontFamily
 import com.bitchat.android.ui.theme.BASE_FONT_SIZE
 import com.bitchat.android.ui.theme.LocalBitchatPalette
 import androidx.compose.ui.res.stringResource
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import com.bitchat.android.core.ui.component.sheet.BitchatBottomSheet

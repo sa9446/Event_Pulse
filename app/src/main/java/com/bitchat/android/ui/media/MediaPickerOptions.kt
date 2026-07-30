@@ -27,7 +27,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.res.stringResource
-import com.bitchat.android.R
+import com.eventpulse.mesh.R
 
 /**
  * Media picker that offers image and file options
