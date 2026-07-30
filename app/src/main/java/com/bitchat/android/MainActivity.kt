@@ -44,6 +44,7 @@ import com.bitchat.android.ui.ChatViewModel
 import com.bitchat.android.ui.OrientationAwareActivity
 import com.bitchat.android.ui.theme.BitchatTheme
 import com.bitchat.android.wifiaware.WifiAwareController
+import com.eventpulse.mesh.EventPulseSplashScreen
 import com.bitchat.android.nostr.PoWPreferenceManager
 import com.bitchat.android.services.VerificationService
 import kotlinx.coroutines.delay
@@ -188,11 +189,9 @@ class MainActivity : OrientationAwareActivity() {
             }
         }
         
-        // Only start onboarding process if we're in the initial CHECKING state
-        // This prevents restarting onboarding on configuration changes
-        if (mainViewModel.onboardingState.value == OnboardingState.CHECKING) {
-            checkOnboardingStatus()
-        }
+        // Splash screen is now shown in the composable during CHECKING state.
+        // The splash composable triggers checkOnboardingStatus() after it completes.
+        // This prevents the onboarding flow from starting before the splash finishes.
     }
     
     @Composable
@@ -312,7 +311,23 @@ class MainActivity : OrientationAwareActivity() {
                 )
             }
 
-            OnboardingState.CHECKING, OnboardingState.INITIALIZING, OnboardingState.COMPLETE -> {
+            OnboardingState.CHECKING -> {
+                // Show splash screen while initializing
+                var splashDone by remember { mutableStateOf(false) }
+                if (!splashDone) {
+                    EventPulseSplashScreen(
+                        onSplashComplete = { splashDone = true }
+                    )
+                } else {
+                    // Splash finished, proceed to initializing
+                    LaunchedEffect(Unit) {
+                        checkOnboardingStatus()
+                    }
+                    InitializingScreen(modifier)
+                }
+            }
+
+            OnboardingState.INITIALIZING, OnboardingState.COMPLETE -> {
                 // Set up back navigation handling for the chat screen
                 val backCallback = object : OnBackPressedCallback(true) {
                     override fun handleOnBackPressed() {

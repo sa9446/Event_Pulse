@@ -9,6 +9,7 @@ import com.bitchat.android.ui.theme.BitchatFontFamily
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
+import com.eventpulse.mesh.*
 import androidx.compose.animation.*
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -79,6 +80,11 @@ fun ChatScreen(viewModel: ChatViewModel) {
     val mentionSuggestions by viewModel.mentionSuggestions.collectAsStateWithLifecycle()
     val showAppInfo by viewModel.showAppInfo.collectAsStateWithLifecycle()
     val showMeshPeerListSheet by viewModel.showMeshPeerList.collectAsStateWithLifecycle()
+    // ── EventPulse State ────────────────────────────────────────────────
+    val eventPulseSelectedChannel by viewModel.selectedEventChannel.collectAsStateWithLifecycle()
+    val eventPulseVenueDensity by viewModel.venueDensity.collectAsStateWithLifecycle()
+    val eventPulseChannelUnreads by viewModel.channelTabUnreadCounts.collectAsStateWithLifecycle()
+    val eventPulseSOSAlert by viewModel.activeSOSAlert.collectAsStateWithLifecycle()
     val privateChatSheetPeer by viewModel.privateChatSheetPeer.collectAsStateWithLifecycle()
     val showVerificationSheet by viewModel.showVerificationSheet.collectAsStateWithLifecycle()
     val showSecurityVerificationSheet by viewModel.showSecurityVerificationSheet.collectAsStateWithLifecycle()
@@ -249,6 +255,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
     ) {
         val headerHeight = ChatHeaderHeight
         val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        val eventChannelTabsHeight = 48.dp
 
         // Both bars are translucent and the conversation scrolls underneath them, so their
         // heights are reserved as list padding instead of as layout space. The composer's height
@@ -291,7 +298,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 modifier = Modifier.fillMaxSize(),
                 conversationKey = conversationKey,
                 contentPadding = PaddingValues(
-                    top = statusBarHeight + headerHeight +
+                    top = statusBarHeight + headerHeight + eventChannelTabsHeight +
                         (if (showNotesStrip) notesStripHeight else 0.dp),
                     bottom = composerHeight
                 ),
@@ -427,6 +434,49 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 showMediaButtons = showMediaButtons
             )
           }
+        }
+
+        // ── SOS Alert Banner ───────────────────────────────────────────────
+        eventPulseSOSAlert?.let { alert ->
+            SOSAlertBanner(
+                alert = alert,
+                onDismiss = { viewModel.dismissSOSAlert() },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = statusBarHeight + headerHeight)
+                    .zIndex(2f)
+            )
+        }
+
+        // ── EventPulse Channel Tabs ────────────────────────────────────────
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = statusBarHeight + headerHeight)
+                .zIndex(1f)
+        ) {
+            EventChannelTabs(
+                selectedChannel = eventPulseSelectedChannel,
+                onChannelSelected = { channel ->
+                    viewModel.selectEventChannel(channel)
+                    // Clear unread count for selected channel
+                    val currentCounts = eventPulseChannelUnreads.toMutableMap()
+                    currentCounts[channel] = 0
+                },
+                unreadCounts = eventPulseChannelUnreads
+            )
+        }
+
+        // ── SOS Action Button ──────────────────────────────────────────────
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 16.dp, bottom = composerHeight + 72.dp)
+                .zIndex(2f)
+        ) {
+            SOSActionButton(
+                onSOS = { viewModel.sendSOS() }
+            )
         }
 
         // Floating header - positioned absolutely at top, ignores keyboard

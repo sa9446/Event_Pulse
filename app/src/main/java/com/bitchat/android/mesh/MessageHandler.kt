@@ -10,6 +10,7 @@ import com.bitchat.android.protocol.BitchatPacket
 import com.bitchat.android.protocol.MessageType
 import com.bitchat.android.sync.PacketIdUtil
 import com.bitchat.android.util.toHexString
+import com.eventpulse.mesh.EventPulsePayload
 import kotlinx.coroutines.*
 import java.util.*
 
@@ -414,6 +415,7 @@ class MessageHandler(private val myPeerID: String, private val appContext: andro
     
     /**
      * Handle broadcast message with verification enforcement
+     * Includes EventPulse JSON payload detection and routing.
      */
     private suspend fun handleBroadcastMessage(routed: RoutedPacket) {
         val packet = routed.packet
@@ -447,11 +449,31 @@ class MessageHandler(private val myPeerID: String, private val appContext: andro
                 Log.w(TAG, "FILE_TRANSFER decode failed (broadcast) from ${peerID.take(8)}")
             }
 
+            // ── EventPulse: Check for structured JSON payload ───────────
+            val rawContent = String(packet.payload, Charsets.UTF_8)
+            if (EventPulsePayload.isEventPulsePayload(packet.payload)) {
+                val epPayload = EventPulsePayload.fromByteArray(packet.payload)
+                if (epPayload != null) {
+                    Log.d(TAG, "EventPulse JSON message on channel '${epPayload.channel}' from $peerID")
+                    // Route via ChatViewModel's EventPulse handler through onMessageReceived
+                    val eventPulseMessage = BitchatMessage(
+                        id = PacketIdUtil.computeIdHex(packet).uppercase(),
+                        sender = epPayload.sender,
+                        content = rawContent,
+                        type = BitchatMessageType.Message,
+                        senderPeerID = peerID,
+                        timestamp = Date(packet.timestamp.toLong())
+                    )
+                    delegate?.onMessageReceived(eventPulseMessage)
+                    return
+                }
+            }
+
             // Fallback: plain text
             val message = BitchatMessage(
                 id = PacketIdUtil.computeIdHex(packet).uppercase(),
                 sender = delegate?.getPeerNickname(peerID) ?: "unknown",
-                content = String(packet.payload, Charsets.UTF_8),
+                content = rawContent,
                 senderPeerID = peerID,
                 timestamp = Date(packet.timestamp.toLong())
             )

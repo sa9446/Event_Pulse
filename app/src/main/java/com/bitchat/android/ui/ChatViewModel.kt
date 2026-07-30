@@ -39,6 +39,8 @@ import com.bitchat.android.noise.NoiseSession
 import com.bitchat.android.services.ContactDirectory
 import com.bitchat.android.services.ContactIdentityResolver
 import com.bitchat.android.util.hexEncodedString
+import com.eventpulse.mesh.*
+import com.google.gson.Gson
 
 private data class ConversationLiveIdentityState(
     val connectedPeerIDs: List<String>,
@@ -166,6 +168,19 @@ class ChatViewModel(
     val verifiedFingerprints = verificationHandler.verifiedFingerprints
 
     // Media file sending manager
+    // Wire EventPulse retraction callbacks
+    init {
+        EventPulseRetractionManager.onLocalMessageRetracted = { msgId ->
+            // Remove from local UI state
+            val updated = state.messages.value.filter { it.id != msgId }
+            state.setMessages(updated)
+        }
+        EventPulseRetractionManager.onRemoteRetractionVerified = { msgId, authorId ->
+            // Show retracted badge via state update
+            Log.d(TAG, "Remote retraction verified for $msgId by $authorId")
+        }
+    }
+
     private val mediaSendingManager = MediaSendingManager(
         state,
         messageManager,
@@ -368,6 +383,13 @@ class ChatViewModel(
     val peerFingerprints: StateFlow<Map<String, String>> = state.peerFingerprints
     val peerNicknames: StateFlow<Map<String, String>> = state.peerNicknames
     val peerRSSI: StateFlow<Map<String, Int>> = state.peerRSSI
+
+    // ── EventPulse State Exposures ──────────────────────────────────────
+    val selectedEventChannel: StateFlow<EventChannel> = state.selectedEventChannel
+    val venueDensity: StateFlow<CrowdDensityCalculator.VenueDensity> = state.venueDensity
+    val channelTabUnreadCounts: StateFlow<Map<EventChannel, Int>> = state.channelTabUnreadCounts
+    val activeSOSAlert: StateFlow<SOSAlert?> = state.activeSOSAlert
+    val isSOSModeActive: StateFlow<Boolean> = state.isSOSModeActive
     val peerDirect: StateFlow<Map<String, Boolean>> = state.peerDirect
     val showAppInfo: StateFlow<Boolean> = state.showAppInfo
     val showMeshPeerList: StateFlow<Boolean> = state.showMeshPeerList
@@ -1211,6 +1233,9 @@ class ChatViewModel(
 
         state.setPeerRSSI(mesh.getPeerRSSI())
 
+        // Update EventPulse venue density from RSSI data
+        updateVenueDensity()
+
         // Update directness per peer (driven by PeerManager state)
         try {
             val directMap = state.getConnectedPeersValue().associateWith { pid ->
@@ -1359,6 +1384,15 @@ class ChatViewModel(
     // MARK: - BluetoothMeshDelegate Implementation (delegated)
     
     override fun didReceiveMessage(message: BitchatMessage) {
+        // EventPulse: Check for structured JSON payload and route to channel tabs
+        try {
+            val contentBytes = message.content.toByteArray(Charsets.UTF_8)
+            if (EventPulsePayload.isEventPulsePayload(contentBytes)) {
+                handleIncomingEventPulsePayload(contentBytes, message.senderPeerID ?: message.sender)
+                return // Prevent raw JSON from appearing in mesh timeline
+            }
+        } catch (_: Exception) { }
+
         meshDelegateHandler.didReceiveMessage(message)
     }
     
@@ -1696,5 +1730,252 @@ class ChatViewModel(
      */
     fun peerIdentityForNostrPubkey(pubkeyHex: String): PeerIdentity =
         geohashViewModel.peerIdentityForNostrPubkey(pubkeyHex)
+
+    // ══════════════════════════════════════════════════════════════════════
+    // EVENTPULSE FEATURES
+    // ══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Select an EventPulse channel tab for routing.
+     */
+    fun selectEventChannel(channel: EventChannel) {
+        state.setSelectedEventChannel(channel)
+    }
+
+    /**
+     * Update the venue density calculation from peer RSSI data.
+     */
+    fun updateVenueDensity() {
+        val rssiMap = state.peerRSSI.value
+        val peerCount = state.connectedPeers.value.size
+        val avgRssi = CrowdDensityCalculator.calculateAverageRssi(rssiMap)
+        val density = CrowdDensityCalculator.calculateVenueDensity(peerCount, avgRssi)
+        state.setVenueDensity(density)
+    }
+
+    /**
+     * Send a message wrapped in EventPulse JSON payload format.
+     */
+    fun sendEventPulseMessage(
+        content: String,
+        channel: EventChannel = state.selectedEventChannel.value,
+        messageType: String = "TEXT",
+        msgId: String = EventPulsePayload.generateMessageId(mesh.myPeerID)
+    ) {
+        val validatedContent = EventPulseRateLimiter.validateOutboundMessage(content)
+        if (validatedContent.isEmpty()) return
+
+        val nickname = state.nickname.value.ifBlank { mesh.myPeerID }
+        val payload = EventPulsePayload(
+            msg_id = msgId,
+            sender = nickname,
+            channel = channel.name.lowercase(),
+            type = messageType,
+            body = validatedContent
+        )
+
+        val jsonBytes = EventPulsePayload.toByteArray(payload)
+        if (jsonBytes == null) {
+            Log.w(TAG, "EventPulse payload exceeds 512 bytes, sending plain text instead")
+            sendMessage(validatedContent, emptyList(), null) { }
+            return
+        }
+
+        // Register for possible retraction
+        EventPulseRetractionManager.registerSentMessage(msgId)
+
+        val jsonContent = String(jsonBytes, Charsets.UTF_8)
+        sendMessage(jsonContent, emptyList(), null) { }
+    }
+
+    /**
+     * Handle an incoming EventPulse JSON payload from the mesh.
+     */
+    fun handleIncomingEventPulsePayload(jsonBytes: ByteArray, senderPeerID: String) {
+        val payload = EventPulsePayload.fromByteArray(jsonBytes) ?: return
+
+        // Feature C: Rate limiting check
+        if (!EventPulseRateLimiter.shouldAcceptIncoming(senderPeerID, payload.body)) return
+
+        // Feature D: SOS bypass
+        if (payload.type == "SOS") {
+            val alert = SOSAlert(
+                senderName = payload.sender,
+                senderPeerID = senderPeerID,
+                message = payload.body
+            )
+            if (EventPulseSOSHandler.registerSOS(alert)) {
+                state.setActiveSOSAlert(alert)
+            }
+            return
+        }
+
+        // Feature A: RETRACT handling
+        if (payload.type == "RETRACT") {
+            val targetMsgId = payload.target_msg_id
+            if (targetMsgId.isNotEmpty()) {
+                val valid = EventPulseRetractionManager.verifyRetraction(
+                    targetMsgId, senderPeerID, senderPeerID
+                )
+                if (valid) {
+                    EventPulseRetractionManager.processRetraction(targetMsgId, senderPeerID)
+                    // Re-broadcast the retraction for cascade
+                    val cascadePayload = EventPulseRetractionManager.buildRetractPayload(
+                        payload.sender, targetMsgId, payload.channel
+                    )
+                    EventPulsePayload.toByteArray(cascadePayload)?.let { bytes ->
+                        sendMessage(String(bytes, Charsets.UTF_8), emptyList(), null) { }
+                    }
+                }
+            }
+            return
+        }
+
+        // Feature C: MEDIA_CHUNK reassembly
+        if (payload.type == "MEDIA_CHUNK") {
+            val reassembledPath = EventPulseMediaChunker.acceptChunk(
+                payload, getApplication(), senderPeerID
+            )
+            if (reassembledPath != null) {
+                // File fully reassembled, add to UI
+                val message = com.bitchat.android.model.BitchatMessage(
+                    sender = payload.sender,
+                    content = reassembledPath,
+                    type = com.bitchat.android.model.BitchatMessageType.Image,
+                    senderPeerID = senderPeerID,
+                    timestamp = java.util.Date()
+                )
+                meshDelegateHandler.didReceiveMessage(message)
+                // Register for retraction
+                EventPulseRetractionManager.registerSentMessage(
+                    payload.msg_id, reassembledPath
+                )
+            }
+            return
+        }
+
+        // Route to channel
+        val eventChannel = EventChannel.fromJsonName(payload.channel)
+        val currentChannel = state.selectedEventChannel.value
+
+        if (eventChannel != currentChannel) {
+            val currentCounts = state.channelTabUnreadCounts.value.toMutableMap()
+            currentCounts[eventChannel] = (currentCounts[eventChannel] ?: 0) + 1
+            state.setChannelTabUnreadCounts(currentCounts)
+        }
+    }
+
+    /**
+     * Send an SOS emergency message over the mesh.
+     */
+    fun sendSOS() {
+        val nickname = state.nickname.value.ifBlank { mesh.myPeerID }
+        val sosMessage = "EMERGENCY: $nickname needs help!"
+        val payload = EventPulsePayload(
+            msg_id = EventPulsePayload.generateMessageId(mesh.myPeerID),
+            sender = nickname,
+            channel = "general",
+            type = "SOS",
+            body = sosMessage
+        )
+        val jsonBytes = EventPulsePayload.toByteArray(payload)
+        if (jsonBytes != null) {
+            sendMessage(String(jsonBytes, Charsets.UTF_8), emptyList(), null) { }
+            state.setIsSOSModeActive(true)
+        }
+    }
+
+    fun dismissSOSAlert() {
+        EventPulseSOSHandler.dismissAllAlerts()
+        state.setActiveSOSAlert(null)
+        state.setIsSOSModeActive(false)
+    }
+
+    // ── Phase 3A: Mesh Recall (Retraction) ─────────────────────────────
+
+    /**
+     * Retract a previously sent message by its ID.
+     */
+    fun retractMessage(msgId: String) {
+        val nickname = state.nickname.value.ifBlank { mesh.myPeerID }
+        val retractPayload = EventPulseRetractionManager.buildRetractPayload(
+            senderName = nickname,
+            targetMsgId = msgId,
+            channel = state.selectedEventChannel.value.name.lowercase()
+        )
+        val jsonBytes = EventPulsePayload.toByteArray(retractPayload)
+        if (jsonBytes != null) {
+            sendMessage(String(jsonBytes, Charsets.UTF_8), emptyList(), null) { }
+            EventPulseRetractionManager.processRetraction(msgId, mesh.myPeerID)
+        }
+    }
+
+    /**
+     * Check if a message has been retracted.
+     */
+    fun isMessageRetracted(msgId: String): Boolean {
+        return EventPulseRetractionManager.isMessageRetracted(msgId)
+    }
+
+    // ── Phase 3B: Quick Media Send ────────────────────────────────────
+
+    /**
+     * Send a photo captured in-app: compress to WebP, chunk, and broadcast.
+     */
+    fun sendCapturedPhoto(filePath: String) {
+        val compressed = EventPulseMediaChunker.compressImage(filePath)
+        if (compressed == null) {
+            Log.w(TAG, "Failed to compress photo, sending raw")
+            sendFileToMesh(filePath, "image/jpeg")
+            return
+        }
+        sendBytesToMesh(compressed, "photo", "image/webp")
+    }
+
+    /**
+     * Send a voice note captured in-app: chunk and broadcast.
+     */
+    fun sendCapturedVoice(filePath: String) {
+        val bytes = java.io.File(filePath).readBytes()
+        sendBytesToMesh(bytes, "voice", "audio/aac")
+    }
+
+    private fun sendBytesToMesh(data: ByteArray, prefix: String, mimeType: String) {
+        val nickname = state.nickname.value.ifBlank { mesh.myPeerID }
+        val fileId = EventPulseMediaChunker.generateFileId(prefix)
+        val channel = state.selectedEventChannel.value.name.lowercase()
+
+        val chunked = EventPulseMediaChunker.chunkBytes(
+            data = data,
+            fileId = fileId,
+            mimeType = mimeType,
+            sender = nickname,
+            channel = channel
+        )
+
+        // PERF: Send chunks in parallel batches for faster mesh throughput
+        viewModelScope.launch {
+            EventPulseMediaChunker.sendChunksParallel(
+                result = chunked,
+                scope = this,
+                sendOne = { chunk ->
+                    val bytes = EventPulsePayload.toByteArray(chunk)
+                    if (bytes != null) {
+                        sendMessage(String(bytes, Charsets.UTF_8), emptyList(), null) { }
+                    }
+                },
+                batchSize = 4
+            )
+        }
+    }
+
+    private fun sendFileToMesh(filePath: String, mimeType: String) {
+        try {
+            val bytes = java.io.File(filePath).readBytes()
+            sendBytesToMesh(bytes, "file", mimeType)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send file: ${e.message}")
+        }
+    }
 
 }

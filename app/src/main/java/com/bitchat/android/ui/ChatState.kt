@@ -2,6 +2,8 @@ package com.bitchat.android.ui
 
 import android.util.Log
 import com.bitchat.android.model.BitchatMessage
+import com.eventpulse.mesh.CrowdDensityCalculator
+import com.eventpulse.mesh.EventPulseSOSHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -68,6 +70,22 @@ class ChatState(
     private val _unreadChannelMessages = MutableStateFlow<Map<String, Int>>(emptyMap())
     val unreadChannelMessages: StateFlow<Map<String, Int>> = _unreadChannelMessages.asStateFlow()
     
+    // ── EventPulse State ────────────────────────────────────────────────
+    private val _selectedEventChannel = MutableStateFlow<com.eventpulse.mesh.EventChannel>(com.eventpulse.mesh.EventChannel.GENERAL)
+    val selectedEventChannel: StateFlow<com.eventpulse.mesh.EventChannel> = _selectedEventChannel.asStateFlow()
+
+    private val _venueDensity = MutableStateFlow(CrowdDensityCalculator.VenueDensity.UNKNOWN)
+    val venueDensity: StateFlow<CrowdDensityCalculator.VenueDensity> = _venueDensity.asStateFlow()
+
+    private val _channelTabUnreadCounts = MutableStateFlow<Map<com.eventpulse.mesh.EventChannel, Int>>(emptyMap())
+    val channelTabUnreadCounts: StateFlow<Map<com.eventpulse.mesh.EventChannel, Int>> = _channelTabUnreadCounts.asStateFlow()
+
+    private val _activeSOSAlert = MutableStateFlow<com.eventpulse.mesh.SOSAlert?>(null)
+    val activeSOSAlert: StateFlow<com.eventpulse.mesh.SOSAlert?> = _activeSOSAlert.asStateFlow()
+
+    private val _isSOSModeActive = MutableStateFlow(false)
+    val isSOSModeActive: StateFlow<Boolean> = _isSOSModeActive.asStateFlow()
+
     private val _passwordProtectedChannels = MutableStateFlow<Set<String>>(emptySet())
     val passwordProtectedChannels: StateFlow<Set<String>> = _passwordProtectedChannels.asStateFlow()
     
@@ -200,6 +218,11 @@ class ChatState(
 
     fun getTeleportedGeoValue() = _teleportedGeo.value
     fun getGeohashParticipantCountsValue() = _geohashParticipantCounts.value
+    fun getSelectedEventChannelValue() = _selectedEventChannel.value
+    fun getVenueDensityValue() = _venueDensity.value
+    fun getChannelTabUnreadCountsValue() = _channelTabUnreadCounts.value
+    fun getActiveSOSAlertValue() = _activeSOSAlert.value
+    fun getIsSOSModeActiveValue() = _isSOSModeActive.value
     
     // Setters for state updates
     fun setMessages(messages: List<BitchatMessage>) {
@@ -255,6 +278,26 @@ class ChatState(
     fun setPasswordProtectedChannels(channels: Set<String>) {
         _passwordProtectedChannels.value = channels
     }
+
+    fun setSelectedEventChannel(channel: com.eventpulse.mesh.EventChannel) {
+        _selectedEventChannel.value = channel
+    }
+
+    fun setVenueDensity(density: CrowdDensityCalculator.VenueDensity) {
+        _venueDensity.value = density
+    }
+
+    fun setChannelTabUnreadCounts(counts: Map<com.eventpulse.mesh.EventChannel, Int>) {
+        _channelTabUnreadCounts.value = counts
+    }
+
+    fun setActiveSOSAlert(alert: com.eventpulse.mesh.SOSAlert?) {
+        _activeSOSAlert.value = alert
+    }
+
+    fun setIsSOSModeActive(active: Boolean) {
+        _isSOSModeActive.value = active
+    }
     
     fun setShowPasswordPrompt(show: Boolean) {
         _showPasswordPrompt.value = show
@@ -281,16 +324,7 @@ class ChatState(
     }
 
     fun setFavoritePeers(favorites: Set<String>) {
-        val currentValue = _favoritePeers.value
-        Log.d("ChatState", "setFavoritePeers called with ${favorites.size} favorites: $favorites")
-        Log.d("ChatState", "Current value: $currentValue")
-        Log.d("ChatState", "Values equal: ${currentValue == favorites}")
-        Log.d("ChatState", "Setting on thread: ${Thread.currentThread().name}")
-        
-        // Always set the value - even if equal, this ensures observers are triggered
         _favoritePeers.value = favorites
-        
-        Log.d("ChatState", "StateFlow value after set: ${_favoritePeers.value}")
     }
 
     fun setPeerFavoritedUs(fingerprints: Set<String>) {

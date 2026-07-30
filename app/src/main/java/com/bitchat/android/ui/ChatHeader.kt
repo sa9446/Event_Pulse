@@ -4,6 +4,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
+import com.eventpulse.mesh.CrowdDensityCalculator
+import com.eventpulse.mesh.CrowdPulseRing
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -727,6 +729,7 @@ private fun MainHeader(
     val isConnected by viewModel.isConnected.collectAsStateWithLifecycle()
     val selectedLocationChannel by viewModel.selectedLocationChannel.collectAsStateWithLifecycle()
     val geohashPeople by viewModel.geohashPeople.collectAsStateWithLifecycle()
+    val venueDensity by viewModel.venueDensity.collectAsStateWithLifecycle()
 
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val crowdingMode = headerCrowdingMode(maxWidth)
@@ -806,6 +809,11 @@ private fun MainHeader(
                         showLabel = crowdingMode != HeaderCrowdingMode.IconOnlyLocationChannel
                     )
                 }
+
+                CrowdPulseRing(
+                    density = venueDensity,
+                    peerCount = connectedPeers.filter { it != viewModel.myPeerID }.size
+                )
 
                 PeerCounter(
                     connectedPeers = connectedPeers.filter { it != viewModel.myPeerID },

@@ -1,3 +1,9 @@
+# Nested clone of original repo (don't push)
+/bitchat-android/
+
+# Python temp files
+fix_strings.py
+
 # Android Studio / IntelliJ
 .idea/
 *.iml
