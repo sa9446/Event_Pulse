@@ -1,4 +1,7 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
+import java.io.FileInputStream
+import java.io.File
 
 plugins {
     alias(libs.plugins.android.application)
@@ -51,6 +54,32 @@ android {
         includeInBundle = false
     }
 
+    // Release signing — reads keystore.properties from the repo root if present.
+    // Not present in CI, so release builds there fall back to unsigned APKs.
+    // NEVER commit keystore.properties or the .jks file (both are gitignored).
+    val keystorePropsFile = rootProject.file("keystore.properties")
+    val keystoreProps = Properties().apply {
+        if (keystorePropsFile.exists()) {
+            FileInputStream(keystorePropsFile).use { load(it) }
+        }
+    }
+    val hasReleaseSigning = keystorePropsFile.exists() &&
+        keystoreProps.containsKey("storeFile") &&
+        keystoreProps.containsKey("storePassword") &&
+        keystoreProps.containsKey("keyAlias") &&
+        keystoreProps.containsKey("keyPassword")
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             ndk {
@@ -61,6 +90,9 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -69,6 +101,20 @@ android {
                 // BUILDINFO.json and attestations carry the verified commit
                 // without depending on host-specific Git/worktree paths.
                 include = false
+            }
+        }
+    }
+
+    // Robolectric unit tests run in a forked test-worker JVM. On Windows, the default
+    // sandbox temp path exceeds the 260-char MAX_PATH limit and SQLite fails to open
+    // test databases (SQLITE_CANTOPEN). Route java.io.tmpdir to a short path — but only
+    // on Windows, so Linux CI runners (which have no C:/tmp) are unaffected.
+    testOptions {
+        unitTests.all {
+            if (org.gradle.internal.os.OperatingSystem.current().isWindows) {
+                it.jvmArgs("-Djava.io.tmpdir=C:/tmp")
+                // Java will not create java.io.tmpdir itself; ensure it exists.
+                it.doFirst { File("C:/tmp").mkdirs() }
             }
         }
     }

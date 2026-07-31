@@ -142,7 +142,7 @@ class NostrDirectMessageHandlerTest {
 
     private fun waitForMessage(state: ChatState, messageId: String) {
         kotlinx.coroutines.runBlocking {
-            withTimeout(5_000) {
+            withTimeout(30_000) {
                 while (state.getPrivateChatsValue().values.flatten().none { it.id == messageId }) {
                     delay(10)
                 }

@@ -1897,6 +1897,11 @@ class ChatViewModel(
      * Retract a previously sent message by its ID.
      */
     fun retractMessage(msgId: String) {
+        // Guard: ignore duplicate retractions (double long-press, re-broadcast)
+        if (EventPulseRetractionManager.isMessageRetracted(msgId)) {
+            Log.d(TAG, "Message $msgId already retracted, ignoring duplicate")
+            return
+        }
         val nickname = state.nickname.value.ifBlank { mesh.myPeerID }
         val retractPayload = EventPulseRetractionManager.buildRetractPayload(
             senderName = nickname,

@@ -91,8 +91,26 @@ fun ChatUserSheet(
                         }
                     }
                     
+                    // Retract for Everyone — Mesh Recall (own messages only, not already retracted)
+                    selectedMessage?.let { message ->
+                        val isOwnMessage = message.sender.substringBefore('#') == viewModel.nickname.value
+                        if (isOwnMessage && !viewModel.isMessageRetracted(message.id)) {
+                            item {
+                                UserActionRow(
+                                    title = "Retract for Everyone",
+                                    subtitle = "Delete this message from all connected mesh devices",
+                                    titleColor = standardRed,
+                                    onClick = {
+                                        viewModel.retractMessage(message.id)
+                                        onDismiss()
+                                    }
+                                )
+                            }
+                        }
+                    }
+
                     // Only show user actions for other users' messages or when no message is selected
-                    if (selectedMessage?.sender != viewModel.nickname.value) {
+                    if (selectedMessage?.sender?.substringBefore('#') != viewModel.nickname.value) {
                         // Send private message action
                         item {
                             UserActionRow(

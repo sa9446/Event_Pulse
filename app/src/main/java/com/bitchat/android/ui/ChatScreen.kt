@@ -99,7 +99,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
     var showUserSheet by remember { mutableStateOf(false) }
     var selectedUserForSheet by remember { mutableStateOf("") }
     var selectedMessageForSheet by remember { mutableStateOf<BitchatMessage?>(null) }
-    var retractConfirmMessage by remember { mutableStateOf<BitchatMessage?>(null) }
     var showFullScreenImageViewer by remember { mutableStateOf(false) }
     var viewerImagePaths by remember { mutableStateOf(emptyList<String>()) }
     var initialViewerIndex by remember { mutableStateOf(0) }
@@ -340,14 +339,9 @@ fun ChatScreen(viewModel: ChatViewModel) {
                     // Message long press - open user action sheet with message context
                     // Extract base nickname from message sender (contains all necessary info)
                     val (baseName, _) = splitSuffix(message.sender)
-                    if (baseName == nickname) {
-                        // Own message: offer Mesh Recall (Retract for Everyone)
-                        retractConfirmMessage = message
-                    } else {
-                        selectedUserForSheet = baseName
-                        selectedMessageForSheet = message
-                        showUserSheet = true
-                    }
+                    selectedUserForSheet = baseName
+                    selectedMessageForSheet = message
+                    showUserSheet = true
                 },
                 onCancelTransfer = { msg ->
                     viewModel.cancelMediaSend(msg.id)
@@ -549,24 +543,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
             imagePaths = viewerImagePaths,
             initialIndex = initialViewerIndex,
             onClose = { showFullScreenImageViewer = false }
-        )
-    }
-
-    // Mesh Recall: retract confirmation for own messages (long-press trigger)
-    retractConfirmMessage?.let { msg ->
-        AlertDialog(
-            onDismissRequest = { retractConfirmMessage = null },
-            title = { Text("Retract for Everyone?") },
-            text = { Text("This deletes the message from all connected mesh devices.\n\nRetracted messages are marked as \"retracted by sender\" everywhere.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.retractMessage(msg.id)
-                    retractConfirmMessage = null
-                }) { Text("Retract") }
-            },
-            dismissButton = {
-                TextButton(onClick = { retractConfirmMessage = null }) { Text("Cancel") }
-            }
         )
     }
 
