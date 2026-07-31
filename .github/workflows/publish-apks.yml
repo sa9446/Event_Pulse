@@ -1,0 +1,98 @@
+# ============================================================
+# EventPulse — Publish Release APKs
+# ============================================================
+# Fast hackathon release path: pushing a vX.Y.Z tag (or manually
+# dispatching) builds SIGNED release APKs and publishes them as a
+# GitHub Release with the APKs attached.
+#
+# Signing: no secrets required. app/build.gradle.kts falls back to
+# the committed CI/demo keystore (keystores/eventpulse-ci-release.keystore,
+# well-known password) when keystore.properties is absent — the same
+# keystore whose certificate fingerprint is pinned in
+# BITCHAT_GITHUB_RELEASE_CERT_SHA256 (gradle.properties) so the in-app
+# updater accepts these APKs.
+#
+# Note: upstream's release.yml (reproducible unsigned builds + local
+# signing) still runs on v* tags and is independent of this workflow.
+
+name: Publish Release APKs
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and publish (e.g. v1.0.0). Leave empty to skip the GitHub Release."
+        required: false
+        type: string
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true"
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  publish:
+    name: Build & publish signed APKs
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout ${{ env.RELEASE_TAG }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install Android SDK components (fallback if missing)
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME \
+            "platforms;android-37" "build-tools;37.0.0" > /dev/null 2>&1 || true
+
+      - name: Build signed release APKs
+        # Splits are auto-enabled for assemble tasks: arm64-v8a, armeabi-v7a,
+        # x86, x86_64, plus a universal APK. All are signed via the CI keystore.
+        run: ./gradlew assembleRelease --build-cache --no-daemon
+
+      - name: Verify release APK signatures
+        run: |
+          # Matches buildTools pinned in gradle/libs.versions.toml (37.0.0).
+          APKSIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+          for apk in app/build/outputs/apk/release/*.apk; do
+            "$APKSIGNER" verify --print-certs "$apk"
+          done
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: eventpulse-release-apks
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        # Only on tag pushes — manual dispatches upload artifacts only.
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/*.apk
+          generate_release_notes: true
+          name: EventPulse ${{ github.ref_name }}
+          draft: false
+          prerelease: false

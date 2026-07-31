@@ -73,6 +73,12 @@ google-services.json
 *.jks
 *.keystore
 keystore.properties
+keystore.properties.bak
+
+# CI/demo signing keystore — intentionally committed (well-known password,
+# demo/hackathon builds only). Production keys stay out of the repo.
+!keystores/
+!keystores/*.keystore
 
 # Arti build artifacts (cloned repo and Rust build cache)
 tools/arti-build/.arti-source/

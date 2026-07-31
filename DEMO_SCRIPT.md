@@ -165,6 +165,58 @@ A 3-5 minute demo showing the key features of EventPulse running on two Android 
 - **Audio voiceover:** Record with a good USB mic in a quiet room
 - **Editing:** Use CapCut, DaVinci Resolve, or Premiere Pro
 
+## Storyboard — Shot-by-Shot (recordable)
+
+Camera conventions: **A** = wide/setup shot (both phones on stands), **B** = close-up of
+phone 1 screen, **C** = close-up of phone 2 screen, **D** = screen recording overlay
+(cropped fullscreen). Record every shot 3–5 seconds longer than the listed cut.
+
+| Shot | Scene | Timecode | Camera | On-screen action | Narration (exact line) | Text overlay |
+|------|-------|----------|--------|------------------|------------------------|--------------|
+| 1 | Splash | 0:00–0:06 | D | Tap app icon → splash pulse rings → "EventPulse" title | "EventPulse is an offline, serverless event engagement platform." | *Zero infrastructure required* |
+| 2 | Onboarding | 0:06–0:18 | D | Permission dialogs: BLE → Nearby devices → Location → Allow all | "No WiFi, no cell service, no servers — just pure BLE mesh networking." | — |
+| 3 | Landing | 0:18–0:30 | D | Land on main chat screen; header bar in frame | "Between every device in the venue." | — |
+| 4 | Discovery | 0:30–0:42 | A | Both phones visible; bring phone 2 closer | "As devices come into range, EventPulse automatically discovers them and builds a mesh network." | *Live crowd density via RSSI* |
+| 5 | Pulse | 0:42–1:00 | B | Peer count 0 → 1 → 2; ring UNKNOWN → LOW → MEDIUM | "The Crowd Pulse Ring shows venue density in real time." | *MEDIUM — 4 peers* |
+| 6 | Channels | 1:00–1:15 | B | Switch `#announcements`; type on phone 1 | "Messages are organized into channels. Announcements from organizers…" | *Structured chat over BLE mesh* |
+| 7 | Cross-device | 1:15–1:30 | C | Phone 2 shows the message instantly; verified badge visible | "…Q&A for audience questions, and general chat for everyone." | — |
+| 8 | Round trip | 1:30–1:45 | B + C | Phone 2 → `#qa` → question → appears on phone 1 | "Each message carries a sender name, timestamp, channel tag, and verified badge." | — |
+| 9 | Camera | 1:45–2:05 | D | Tap camera button → take photo → auto-send | "Photos are automatically compressed to WebP and split into chunks for BLE transmission." | *Compressed media over BLE* |
+| 10 | Media received | 2:05–2:15 | C | Thumbnail appears on phone 2 (watch it load) | "…all without saving to your gallery." | — |
+| 11 | Voice note | 2:15–2:30 | D | Hold mic → record → release → waveform on both | "Voice notes record at low bitrate and stream as a waveform." | — |
+| 12 | Mesh Recall | 2:30–2:50 | B | Long-press own message → Retract for Everyone | "Sent something by accident? EventPulse's Mesh Recall lets you retract messages — even media." | *Mesh-wide retraction* |
+| 13 | Retract lands | 2:50–3:00 | C | Message disappears on phone 2 + retracted badge | "…across every connected device in the venue." | *This message was retracted by sender* |
+| 14 | SOS | 3:00–3:15 | B | Tap red SOS button | "In an emergency, the SOS button broadcasts a priority alert that bypasses all filters." | *Priority emergency broadcast* |
+| 15 | SOS lands | 3:15–3:30 | C | Pulsing red banner on phone 2 → dismiss | "…showing a pulsing red banner on every connected device. SOS has a 60-second dedup window." | *🚨 EMERGENCY from Alice* |
+| 16 | Speed | 3:30–3:50 | B | Rapid-fire 3–4 messages; then camera → photo → arrives | "Built for speed — parallel chunked transfer, bitmap caching, and AOT compilation." | *Parallel mesh = 4x faster media* |
+| 17 | Architecture | 3:50–4:15 | A | Split screen or feature-grid card | "Channels, media, retraction, SOS, crowd sensing — all offline, all peer-to-peer." | 6 feature chips |
+| 18 | Open source | 4:15–4:30 | A | GitHub repo QR / URL on end card | "EventPulse is open source and built for hackathons. Fork it, make it your own." | *github.com/sa9446/Event_Pulse* |
+| 19 | Outro | 4:30–4:40 | A | Logo, tagline, socials | "EventPulse — the venue that runs on nothing but the crowd." | *EventPulse* |
+
+### Filming order (fastest retake loop)
+
+1. **Shots 1–3, 6, 9, 11, 12, 14, 16** (phone 1 close-ups, screen recording) — do these first;
+   no second phone needed for the visual.
+2. **Shots 7–8, 10, 13, 15** (phone 2 reactions) — needs both phones live; capture right after
+   each send so the receiving screen is fresh.
+3. **Shots 4–5** (two-phone wide) — last, when both screens show full history.
+4. **Shots 17–19** — graphics-only, edit in post; no devices needed.
+
+### Retake notes
+
+- BLE timing varies — never narrate over a live send; record narration **separately** and
+  cut to the action clip.
+- If a peer-count jump is slow, add 5 s of B-roll of the venue/crowd to cover the gap.
+- Re-record a scene if any permission dialog, notification, or stray toast appears on screen.
+- Keep the status bar visible (battery, time) so reviewers can't claim screen recording was used.
+
+### Post-production checklist
+
+- [ ] Captions: white text, semi-transparent black bar, 60 px
+- [ ] Royalty-free lo-fi/electronic bed at ~20% volume under narration
+- [ ] Cut narration gaps to < 0.5 s; punch in with 10% zoom on key UI moments
+- [ ] Export 1080p60 H.264; final length 4:00–5:00
+
 ## Suggested Tools
 
 | Tool | Purpose |

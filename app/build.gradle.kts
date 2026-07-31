@@ -54,9 +54,11 @@ android {
         includeInBundle = false
     }
 
-    // Release signing — reads keystore.properties from the repo root if present.
-    // Not present in CI, so release builds there fall back to unsigned APKs.
-    // NEVER commit keystore.properties or the .jks file (both are gitignored).
+    // Release signing — reads keystore.properties from the repo root if present
+    // (production flow; NEVER commit keystore.properties or the .jks file).
+    // Falls back to the committed CI/demo keystore (well-known password, like the
+    // Android debug keystore) so GitHub Actions can publish installable signed
+    // release APKs without any secrets. See docs/play-signing.md.
     val keystorePropsFile = rootProject.file("keystore.properties")
     val keystoreProps = Properties().apply {
         if (keystorePropsFile.exists()) {
@@ -69,6 +71,9 @@ android {
         keystoreProps.containsKey("keyAlias") &&
         keystoreProps.containsKey("keyPassword")
 
+    val ciKeystoreFile = rootProject.file("keystores/eventpulse-ci-release.keystore")
+    val hasCiSigning = !hasReleaseSigning && ciKeystoreFile.exists()
+
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
@@ -76,6 +81,13 @@ android {
                 storePassword = keystoreProps.getProperty("storePassword")
                 keyAlias = keystoreProps.getProperty("keyAlias")
                 keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        } else if (hasCiSigning) {
+            create("release") {
+                storeFile = ciKeystoreFile
+                storePassword = "eventpulse-ci-pass"
+                keyAlias = "eventpulse-ci"
+                keyPassword = "eventpulse-ci-pass"
             }
         }
     }
@@ -90,7 +102,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            if (hasReleaseSigning) {
+            if (hasReleaseSigning || hasCiSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }
             proguardFiles(
