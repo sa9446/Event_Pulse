@@ -4,128 +4,126 @@
 # @tools.targetSdkVersion 35
 #
 # PERF: These rules tell the Android Runtime (ART) to
-# ahead-of-time (AOT) compile the listed methods and classes
-# during installation, avoiding JIT warmup cost on first use.
+# ahead-of-time (AOT) compile the listed methods during
+# installation, avoiding JIT warmup cost on first use.
 #
-# Valid syntax (AGP parser is strict):
-#   com/example/Class             -> class rule (NO flags allowed)
-#   HSPL com/example/Class.method() -> method rule (flags + parens)
-# Format: https://developer.android.com/topic/performance/baselineprofiles
+# Format (AGP 9.3.1, ART raw text profile — verified against
+# shipped library profiles):
+#   HSPL<class/name>;-><method>(<args>)<return>
+# Flags are concatenated directly with the class name (no space);
+# bare class rules and 'HSPL Class.method()' syntax are rejected.
+# See: https://developer.android.com/topic/performance/baselineprofiles
 
 # ── Application Entry Point ─────────────────────────────────
-HSPL com/bitchat/android/BitchatApplication.onCreate()
-HSPL com/bitchat/android/BitchatApplication.startCriticalServices()
-
-# ── Main Activity ───────────────────────────────────────────
-HSPL com/bitchat/android/MainActivity.onCreate()
-HSPL com/bitchat/android/OrientationAwareActivity.onCreate()
+HSPLcom/bitchat/android/BitchatApplication;->onCreate()V
+HSPLcom/bitchat/android/BitchatApplication;->startCriticalServices()V
+HSPLcom/bitchat/android/MainActivity;->onCreate(Landroid/os/Bundle;)V
+HSPLcom/bitchat/android/OrientationAwareActivity;->onCreate(Landroid/os/Bundle;)V
 
 # ── Chat Screen (main UI) ───────────────────────────────────
-com/bitchat/android/ui/ChatScreen
-com/bitchat/android/ui/ChatViewModel
-com/bitchat/android/ui/ChatState
-com/bitchat/android/ui/ChatHeader
-com/bitchat/android/ui/MessageComponents
-com/bitchat/android/ui/InputComponents
-com/bitchat/android/ui/MessageManager
-com/bitchat/android/ui/MeshDelegateHandler
-com/bitchat/android/ui/DataManager
+HSPLcom/bitchat/android/ui/ChatScreenKt;->ChatScreen(Landroidx/compose/runtime/Composer;II)V
+HSPLcom/bitchat/android/ui/ChatViewModel;-><init>()V
+HSPLcom/bitchat/android/ui/ChatState;-><init>()V
+HSPLcom/bitchat/android/ui/ChatHeaderKt;-><init>()V
+HSPLcom/bitchat/android/ui/MessageComponentsKt;-><init>()V
+HSPLcom/bitchat/android/ui/InputComponentsKt;-><init>()V
+HSPLcom/bitchat/android/ui/MessageManager;-><init>()V
+HSPLcom/bitchat/android/ui/MeshDelegateHandler;-><init>()V
+HSPLcom/bitchat/android/ui/DataManager;-><init>()V
 
 # ── Mesh Service Stack ──────────────────────────────────────
-com/bitchat/android/mesh/BluetoothMeshService
-com/bitchat/android/mesh/UnifiedMeshService
-com/bitchat/android/mesh/MessageHandler
-com/bitchat/android/mesh/PacketProcessor
-com/bitchat/android/mesh/BluetoothPacketBroadcaster
-com/bitchat/android/mesh/FragmentManager
-com/bitchat/android/mesh/PacketRelayManager
-com/bitchat/android/mesh/MeshCore
-com/bitchat/android/mesh/MeshTransport
-com/bitchat/android/mesh/PeerManager
-com/bitchat/android/mesh/SecurityManager
-com/bitchat/android/mesh/PowerManager
-com/bitchat/android/mesh/StoreForwardManager
-com/bitchat/android/mesh/TransferProgressManager
-com/bitchat/android/mesh/RetryingControlPacketSender
-com/bitchat/android/mesh/BluetoothConnectionManager
-com/bitchat/android/mesh/BluetoothGattClientManager
-com/bitchat/android/mesh/BluetoothGattServerManager
-com/bitchat/android/mesh/BluetoothConnectionTracker
-com/bitchat/android/mesh/BLEPacketPaddingPolicy
-com/bitchat/android/mesh/AnnouncementIdentityValidator
-com/bitchat/android/mesh/AuthenticatedPeerStateCoordinator
-com/bitchat/android/mesh/DirectLinkAnnouncementPolicy
-com/bitchat/android/mesh/FragmentingPacketSender
+HSPLcom/bitchat/android/mesh/BluetoothMeshService;-><init>()V
+HSPLcom/bitchat/android/mesh/UnifiedMeshService;-><init>()V
+HSPLcom/bitchat/android/mesh/MessageHandler;-><init>()V
+HSPLcom/bitchat/android/mesh/PacketProcessor;-><init>()V
+HSPLcom/bitchat/android/mesh/BluetoothPacketBroadcaster;-><init>()V
+HSPLcom/bitchat/android/mesh/FragmentManager;-><init>()V
+HSPLcom/bitchat/android/mesh/PacketRelayManager;-><init>()V
+HSPLcom/bitchat/android/mesh/MeshCore;-><init>()V
+HSPLcom/bitchat/android/mesh/MeshTransport;-><init>()V
+HSPLcom/bitchat/android/mesh/PeerManager;-><init>()V
+HSPLcom/bitchat/android/mesh/SecurityManager;-><init>()V
+HSPLcom/bitchat/android/mesh/PowerManager;-><init>()V
+HSPLcom/bitchat/android/mesh/StoreForwardManager;-><init>()V
+HSPLcom/bitchat/android/mesh/TransferProgressManager;-><init>()V
+HSPLcom/bitchat/android/mesh/RetryingControlPacketSender;-><init>()V
+HSPLcom/bitchat/android/mesh/BluetoothConnectionManager;-><init>()V
+HSPLcom/bitchat/android/mesh/BluetoothGattClientManager;-><init>()V
+HSPLcom/bitchat/android/mesh/BluetoothGattServerManager;-><init>()V
+HSPLcom/bitchat/android/mesh/BluetoothConnectionTracker;-><init>()V
+HSPLcom/bitchat/android/mesh/BLEPacketPaddingPolicy;-><init>()V
+HSPLcom/bitchat/android/mesh/AnnouncementIdentityValidator;-><init>()V
+HSPLcom/bitchat/android/mesh/AuthenticatedPeerStateCoordinator;-><init>()V
+HSPLcom/bitchat/android/mesh/DirectLinkAnnouncementPolicy;-><init>()V
+HSPLcom/bitchat/android/mesh/FragmentingPacketSender;-><init>()V
 
 # ── Transport & Protocol ────────────────────────────────────
-com/bitchat/android/protocol/BinaryProtocol
-com/bitchat/android/protocol/BitchatPacket
-com/bitchat/android/protocol/CompressionUtil
-com/bitchat/android/protocol/MessagePadding
-com/bitchat/android/protocol/MessageType
-com/bitchat/android/protocol/DecompressionResourcePool
-com/bitchat/android/wifi-aware/WifiAwareMeshService
-com/bitchat/android/wifi-aware/WifiAwareController
+HSPLcom/bitchat/android/protocol/BinaryProtocol;-><init>()V
+HSPLcom/bitchat/android/protocol/BitchatPacket;-><init>()V
+HSPLcom/bitchat/android/protocol/CompressionUtil;-><init>()V
+HSPLcom/bitchat/android/protocol/MessagePadding;-><init>()V
+HSPLcom/bitchat/android/protocol/MessageType;-><init>()V
+HSPLcom/bitchat/android/protocol/DecompressionResourcePool;-><init>()V
+HSPLcom/bitchat/android/wifi-aware/WifiAwareMeshService;-><init>()V
+HSPLcom/bitchat/android/wifi-aware/WifiAwareController;-><init>()V
 
 # ── Cryptography & Noise ────────────────────────────────────
-com/bitchat/android/crypto/EncryptionService
-com/bitchat/android/noise/NoiseEncryptionService
-com/bitchat/android/noise/NoiseSessionManager
-com/bitchat/android/noise/NoiseSession
-com/bitchat/android/noise/NoisePeerIdentity
-com/bitchat/android/noise/NoiseChannelEncryption
+HSPLcom/bitchat/android/crypto/EncryptionService;-><init>()V
+HSPLcom/bitchat/android/noise/NoiseEncryptionService;-><init>()V
+HSPLcom/bitchat/android/noise/NoiseSessionManager;-><init>()V
+HSPLcom/bitchat/android/noise/NoiseSession;-><init>()V
+HSPLcom/bitchat/android/noise/NoisePeerIdentity;-><init>()V
+HSPLcom/bitchat/android/noise/NoiseChannelEncryption;-><init>()V
 
 # ── Nostr Stack ─────────────────────────────────────────────
-com/bitchat/android/nostr/NostrClient
-com/bitchat/android/nostr/NostrTransport
-com/bitchat/android/nostr/NostrProtocol
-com/bitchat/android/nostr/NostrEventDeduplicator
-com/bitchat/android/nostr/NostrRelayManager
-com/bitchat/android/nostr/NostrSubscriptionManager
-com/bitchat/android/nostr/NostrBackgroundRuntime
-com/bitchat/android/nostr/RelayDirectory
+HSPLcom/bitchat/android/nostr/NostrClient;-><init>()V
+HSPLcom/bitchat/android/nostr/NostrTransport;-><init>()V
+HSPLcom/bitchat/android/nostr/NostrProtocol;-><init>()V
+HSPLcom/bitchat/android/nostr/NostrEventDeduplicator;-><init>()V
+HSPLcom/bitchat/android/nostr/NostrRelayManager;-><init>()V
+HSPLcom/bitchat/android/nostr/NostrSubscriptionManager;-><init>()V
+HSPLcom/bitchat/android/nostr/NostrBackgroundRuntime;-><init>()V
+HSPLcom/bitchat/android/nostr/RelayDirectory;-><init>()V
 
 # ── Services ────────────────────────────────────────────────
-com/bitchat/android/service/MeshForegroundService
-com/bitchat/android/service/TransportBridgeService
-com/bitchat/android/services/MessageRouter
-com/bitchat/android/services/ConversationRepository
-com/bitchat/android/services/AppStateStore
-com/bitchat/android/services/MessageRetentionService
-com/bitchat/android/services/ContactDirectory
-com/bitchat/android/services/IncomingMessageAdmission
-com/bitchat/android/services/SeenMessageStore
+HSPLcom/bitchat/android/service/MeshForegroundService;-><init>()V
+HSPLcom/bitchat/android/service/TransportBridgeService;-><init>()V
+HSPLcom/bitchat/android/services/MessageRouter;-><init>()V
+HSPLcom/bitchat/android/services/ConversationRepository;-><init>()V
+HSPLcom/bitchat/android/services/AppStateStore;-><init>()V
+HSPLcom/bitchat/android/services/MessageRetentionService;-><init>()V
+HSPLcom/bitchat/android/services/ContactDirectory;-><init>()V
+HSPLcom/bitchat/android/services/IncomingMessageAdmission;-><init>()V
+HSPLcom/bitchat/android/services/SeenMessageStore;-><init>()V
 
 # ── EventPulse Features ─────────────────────────────────────
-com/eventpulse/mesh/EventPulsePayload
-com/eventpulse/mesh/EventPulseUIComponents
-com/eventpulse/mesh/CrowdDensityCalculator
-com/eventpulse/mesh/EventPulseRateLimiter
-com/eventpulse/mesh/EventPulseSOSHandler
-com/eventpulse/mesh/EventPulseRetractionManager
-com/eventpulse/mesh/EventPulseMediaChunker
-com/eventpulse/mesh/EventPulseMediaCapture
-com/eventpulse/mesh/EventPulseSplashScreen
+HSPLcom/eventpulse/mesh/EventPulsePayload;-><init>()V
+HSPLcom/eventpulse/mesh/EventPulseUIComponentsKt;-><init>()V
+HSPLcom/eventpulse/mesh/CrowdDensityCalculator;-><init>()V
+HSPLcom/eventpulse/mesh/EventPulseRateLimiter;-><init>()V
+HSPLcom/eventpulse/mesh/EventPulseSOSHandler;-><init>()V
+HSPLcom/eventpulse/mesh/EventPulseRetractionManager;-><init>()V
+HSPLcom/eventpulse/mesh/EventPulseMediaChunker;-><init>()V
+HSPLcom/eventpulse/mesh/EventPulseMediaCaptureKt;-><init>()V
+HSPLcom/eventpulse/mesh/EventPulseSplashScreenKt;-><init>()V
 
-# ── Compose Hot Paths (composables are functions -> method rules) ──
-HSPL androidx/compose/foundation/lazy/LazyColumn()
-HSPL androidx/compose/material3/Surface()
-HSPL androidx/compose/material3/Text()
-HSPL androidx/compose/material3/Icon()
-HSPL androidx/compose/material3/Badge()
-HSPL androidx/compose/material3/MaterialTheme()
-HSPL androidx/compose/material3/TopAppBar()
-androidx/compose/animation/core/InfiniteTransition
-androidx/compose/ui/platform/ComposeView
+# ── Compose Hot Paths ───────────────────────────────────────
+HSPLandroidx/compose/foundation/lazy/LazyDslKt;-><init>()V
+HSPLandroidx/compose/material3/SurfaceKt;-><init>()V
+HSPLandroidx/compose/material3/TextKt;-><init>()V
+HSPLandroidx/compose/material3/IconKt;-><init>()V
+HSPLandroidx/compose/material3/MaterialThemeKt;-><init>()V
+HSPLandroidx/compose/material3/AppBarKt;-><init>()V
+HSPLandroidx/compose/animation/core/InfiniteTransition;-><init>()V
+HSPLandroidx/compose/ui/platform/ComposeView;-><init>(Landroid/content/Context;)V
 
 # ── Coroutines ──────────────────────────────────────────────
-kotlinx/coroutines/CoroutineScope
-kotlinx/coroutines/Dispatchers
-kotlinx/coroutines/flow/MutableStateFlow
-kotlinx/coroutines/flow/StateFlow
-HSPL kotlinx/coroutines/launch()
+HSPLkotlinx/coroutines/CoroutineScope;-><init>()V
+HSPLkotlinx/coroutines/Dispatchers;-><init>()V
+HSPLkotlinx/coroutines/flow/MutableStateFlow;-><init>()V
+HSPLkotlinx/coroutines/flow/StateFlow;-><init>()V
+HSPLkotlinx/coroutines/BuildersKt;-><init>()V
 
 # ── Lifecycle ───────────────────────────────────────────────
-HSPL androidx/lifecycle/compose/collectAsStateWithLifecycle()
-androidx/lifecycle/ViewModel
-HSPL androidx/lifecycle/viewModelScope()
+HSPLandroidx/lifecycle/ViewModel;-><init>()V
+HSPLandroidx/lifecycle/compose/LifecycleExtKt;-><init>()V
