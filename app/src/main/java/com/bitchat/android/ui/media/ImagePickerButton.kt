@@ -109,7 +109,7 @@ fun ImagePickerButton(
     ) { tint ->
         Icon(
             imageVector = Icons.Filled.PhotoCamera,
-            contentDescription = stringResource(com.bitchat.android.R.string.pick_image),
+            contentDescription = stringResource(com.eventpulse.mesh.R.string.pick_image),
             tint = tint,
             modifier = Modifier.size(ComposerIconSize)
         )

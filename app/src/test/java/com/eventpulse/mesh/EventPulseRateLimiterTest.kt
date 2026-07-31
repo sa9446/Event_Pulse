@@ -1,9 +1,17 @@
 package com.eventpulse.mesh
 
 import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Test
 
 class EventPulseRateLimiterTest {
+
+    @Before
+    fun setUp() {
+        // Isolate tests: the rate limiter is a singleton, so state must be cleared
+        // before each test or messages from previous tests bleed in.
+        EventPulseRateLimiter.clear()
+    }
 
     @Test
     fun `message over 280 chars is truncated`() {
@@ -28,10 +36,13 @@ class EventPulseRateLimiterTest {
     }
 
     @Test
-    fun `different message from same sender is accepted`() {
-        EventPulseRateLimiter.shouldAcceptIncoming("peer1", "First message")
+    fun `second message from same sender within rate-limit window is rejected`() {
+        val first = EventPulseRateLimiter.shouldAcceptIncoming("peer1", "First message")
+        assertTrue("First message should be accepted", first)
+
+        // Spec: max 1 message per 2 seconds per sender ID.
         val second = EventPulseRateLimiter.shouldAcceptIncoming("peer1", "Second message")
-        assertTrue("Different message should be accepted", second)
+        assertFalse("Second message within 2s window should be rate-limited", second)
     }
 
     @Test

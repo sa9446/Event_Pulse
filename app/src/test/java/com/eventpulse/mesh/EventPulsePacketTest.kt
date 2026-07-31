@@ -48,7 +48,9 @@ class EventPulsePacketTest {
 
     @Test
     fun `isEventPulsePayload detects valid JSON`() {
-        val json = """{"sender":"Test","channel":"qa","type":"CHAT","timestamp":100,"body":"hello"}"""
+        // isEventPulsePayload requires the msg_id field, which every real EventPulse
+        // packet carries. Include it in the test fixture.
+        val json = """{"msg_id":"usr_Test_100_0","sender":"Test","channel":"qa","type":"CHAT","timestamp":100,"body":"hello"}"""
         assertTrue(EventPulsePayload.isEventPulsePayload(json.toByteArray()))
     }
 

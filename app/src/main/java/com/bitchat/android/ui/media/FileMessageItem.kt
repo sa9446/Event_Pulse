@@ -63,7 +63,7 @@ fun FileMessageItem(
             // File icon
             Icon(
                 imageVector = Icons.Filled.Description,
-                contentDescription = stringResource(com.bitchat.android.R.string.cd_file),
+                contentDescription = stringResource(com.eventpulse.mesh.R.string.cd_file),
                 tint = getFileIconColor(packet.fileName),
                 modifier = Modifier.size(32.dp)
             )

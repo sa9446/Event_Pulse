@@ -1777,7 +1777,7 @@ class ChatViewModel(
         val jsonBytes = EventPulsePayload.toByteArray(payload)
         if (jsonBytes == null) {
             Log.w(TAG, "EventPulse payload exceeds 512 bytes, sending plain text instead")
-            sendMessage(validatedContent, emptyList(), null) { }
+            sendMessage(validatedContent)
             return
         }
 
@@ -1785,7 +1785,7 @@ class ChatViewModel(
         EventPulseRetractionManager.registerSentMessage(msgId)
 
         val jsonContent = String(jsonBytes, Charsets.UTF_8)
-        sendMessage(jsonContent, emptyList(), null) { }
+        sendMessage(jsonContent)
     }
 
     /**
@@ -1824,7 +1824,7 @@ class ChatViewModel(
                         payload.sender, targetMsgId, payload.channel
                     )
                     EventPulsePayload.toByteArray(cascadePayload)?.let { bytes ->
-                        sendMessage(String(bytes, Charsets.UTF_8), emptyList(), null) { }
+                        sendMessage(String(bytes, Charsets.UTF_8))
                     }
                 }
             }
@@ -1880,7 +1880,7 @@ class ChatViewModel(
         )
         val jsonBytes = EventPulsePayload.toByteArray(payload)
         if (jsonBytes != null) {
-            sendMessage(String(jsonBytes, Charsets.UTF_8), emptyList(), null) { }
+            sendMessage(String(jsonBytes, Charsets.UTF_8))
             state.setIsSOSModeActive(true)
         }
     }
@@ -1905,7 +1905,7 @@ class ChatViewModel(
         )
         val jsonBytes = EventPulsePayload.toByteArray(retractPayload)
         if (jsonBytes != null) {
-            sendMessage(String(jsonBytes, Charsets.UTF_8), emptyList(), null) { }
+            sendMessage(String(jsonBytes, Charsets.UTF_8))
             EventPulseRetractionManager.processRetraction(msgId, mesh.myPeerID)
         }
     }
@@ -1961,7 +1961,7 @@ class ChatViewModel(
                 sendOne = { chunk ->
                     val bytes = EventPulsePayload.toByteArray(chunk)
                     if (bytes != null) {
-                        sendMessage(String(bytes, Charsets.UTF_8), emptyList(), null) { }
+                        sendMessage(String(bytes, Charsets.UTF_8))
                     }
                 },
                 batchSize = 4

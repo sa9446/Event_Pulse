@@ -265,7 +265,7 @@ fun VoiceRecordButton(
     ) { tint ->
         Icon(
             imageVector = Icons.Filled.Mic,
-            contentDescription = stringResource(com.bitchat.android.R.string.cd_record_voice),
+            contentDescription = stringResource(com.eventpulse.mesh.R.string.cd_record_voice),
             tint = tint,
             modifier = Modifier.size(ComposerIconSize)
         )

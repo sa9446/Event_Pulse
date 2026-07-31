@@ -113,7 +113,7 @@ fun ImageMessageItem(
                         // Fully revealed image
                         Image(
                             bitmap = img,
-                            contentDescription = stringResource(com.bitchat.android.R.string.cd_image),
+                            contentDescription = stringResource(com.eventpulse.mesh.R.string.cd_image),
                             modifier = Modifier
                                 .widthIn(max = 300.dp)
                                 .aspectRatio(aspect)
@@ -137,13 +137,13 @@ fun ImageMessageItem(
                                 .clickable { onCancelTransfer?.invoke(message) },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(imageVector = Icons.Filled.Close, contentDescription = stringResource(com.bitchat.android.R.string.cd_cancel), tint = Color.White, modifier = Modifier.size(14.dp))
+                            Icon(imageVector = Icons.Filled.Close, contentDescription = stringResource(com.eventpulse.mesh.R.string.cd_cancel), tint = Color.White, modifier = Modifier.size(14.dp))
                         }
                     }
                 }
             }
         } else {
-            Text(text = stringResource(com.bitchat.android.R.string.image_unavailable), fontFamily = BitchatFontFamily, color = Color.Gray)
+            Text(text = stringResource(com.eventpulse.mesh.R.string.image_unavailable), fontFamily = BitchatFontFamily, color = Color.Gray)
         }
     }
 }

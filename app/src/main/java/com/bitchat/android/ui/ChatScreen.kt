@@ -526,7 +526,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 IconButton(onClick = { forceScrollToBottom = !forceScrollToBottom }) {
                     Icon(
                         imageVector = Icons.Filled.ArrowDownward,
-                        contentDescription = stringResource(com.bitchat.android.R.string.cd_scroll_to_bottom),
+                        contentDescription = stringResource(com.eventpulse.mesh.R.string.cd_scroll_to_bottom),
                         modifier = Modifier.size(22.dp),
                         tint = colorScheme.primary
                     )
@@ -592,11 +592,11 @@ fun ChatScreen(viewModel: ChatViewModel) {
     legacyPrivateMediaConsent?.let { request ->
         AlertDialog(
             onDismissRequest = { viewModel.cancelLegacyPrivateMedia(request.requestId) },
-            title = { Text(stringResource(com.bitchat.android.R.string.private_media_legacy_title)) },
+            title = { Text(stringResource(com.eventpulse.mesh.R.string.private_media_legacy_title)) },
             text = {
                 Text(
                     stringResource(
-                        com.bitchat.android.R.string.private_media_legacy_body,
+                        com.eventpulse.mesh.R.string.private_media_legacy_body,
                         request.fileName,
                         request.recipientNickname,
                         request.warning
@@ -605,7 +605,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
             },
             confirmButton = {
                 TextButton(onClick = { viewModel.approveLegacyPrivateMedia(request.requestId) }) {
-                    Text(stringResource(com.bitchat.android.R.string.private_media_legacy_send_once))
+                    Text(stringResource(com.eventpulse.mesh.R.string.private_media_legacy_send_once))
                 }
             },
             dismissButton = {
