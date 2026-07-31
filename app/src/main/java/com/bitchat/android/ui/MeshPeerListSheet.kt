@@ -1872,6 +1872,8 @@ fun PrivateChatSheet(
                         onSendFileNote = { peer, channel, path ->
                             viewModel.sendFileNote(peer, channel, path)
                         },
+                        onPhotoCaptured = { path -> viewModel.sendCapturedPhoto(path) },
+                        onVoiceNoteReady = { path -> viewModel.sendCapturedVoice(path) },
                         showCommandSuggestions = false,
                         commandSuggestions = emptyList(),
                         showMentionSuggestions = false,

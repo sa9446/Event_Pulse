@@ -99,6 +99,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
     var showUserSheet by remember { mutableStateOf(false) }
     var selectedUserForSheet by remember { mutableStateOf("") }
     var selectedMessageForSheet by remember { mutableStateOf<BitchatMessage?>(null) }
+    var retractConfirmMessage by remember { mutableStateOf<BitchatMessage?>(null) }
     var showFullScreenImageViewer by remember { mutableStateOf(false) }
     var viewerImagePaths by remember { mutableStateOf(emptyList<String>()) }
     var initialViewerIndex by remember { mutableStateOf(0) }
@@ -339,9 +340,14 @@ fun ChatScreen(viewModel: ChatViewModel) {
                     // Message long press - open user action sheet with message context
                     // Extract base nickname from message sender (contains all necessary info)
                     val (baseName, _) = splitSuffix(message.sender)
-                    selectedUserForSheet = baseName
-                    selectedMessageForSheet = message
-                    showUserSheet = true
+                    if (baseName == nickname) {
+                        // Own message: offer Mesh Recall (Retract for Everyone)
+                        retractConfirmMessage = message
+                    } else {
+                        selectedUserForSheet = baseName
+                        selectedMessageForSheet = message
+                        showUserSheet = true
+                    }
                 },
                 onCancelTransfer = { msg ->
                     viewModel.cancelMediaSend(msg.id)
@@ -407,6 +413,8 @@ fun ChatScreen(viewModel: ChatViewModel) {
         onSendFileNote = { peer, onionOrChannel, path ->
             viewModel.sendFileNote(peer, onionOrChannel, path)
         },
+        onPhotoCaptured = { path -> viewModel.sendCapturedPhoto(path) },
+        onVoiceNoteReady = { path -> viewModel.sendCapturedVoice(path) },
         
         showCommandSuggestions = showCommandSuggestions,
         commandSuggestions = commandSuggestions,
@@ -544,6 +552,24 @@ fun ChatScreen(viewModel: ChatViewModel) {
         )
     }
 
+    // Mesh Recall: retract confirmation for own messages (long-press trigger)
+    retractConfirmMessage?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { retractConfirmMessage = null },
+            title = { Text("Retract for Everyone?") },
+            text = { Text("This deletes the message from all connected mesh devices.\n\nRetracted messages are marked as \"retracted by sender\" everywhere.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.retractMessage(msg.id)
+                    retractConfirmMessage = null
+                }) { Text("Retract") }
+            },
+            dismissButton = {
+                TextButton(onClick = { retractConfirmMessage = null }) { Text("Cancel") }
+            }
+        )
+    }
+
     // Dialogs and Sheets
     ChatDialogs(
         showPasswordDialog = showPasswordDialog,
@@ -663,6 +689,8 @@ fun ChatInputSection(
     onSendVoiceNote: (String?, String?, String) -> Unit,
     onSendImageNote: (String?, String?, String) -> Unit,
     onSendFileNote: (String?, String?, String) -> Unit,
+    onPhotoCaptured: (String) -> Unit,
+    onVoiceNoteReady: (String) -> Unit,
     showCommandSuggestions: Boolean,
     commandSuggestions: List<CommandSuggestion>,
     showMentionSuggestions: Boolean,
@@ -741,6 +769,16 @@ fun ChatInputSection(
                 HorizontalDivider(thickness = 1.dp, color = colorScheme.outlineVariant)
             }
         }
+        // EventPulse quick capture row: one-tap camera + voice note above the composer
+        if (showMediaButtons) {
+            EventPulseMediaCaptureRow(
+                onPhotoCaptured = onPhotoCaptured,
+                onVoiceNoteReady = onVoiceNoteReady,
+                modifier = Modifier.fillMaxWidth()
+            )
+            HorizontalDivider(thickness = 1.dp, color = colorScheme.outlineVariant)
+        }
+
         MessageInput(
             value = messageText,
             onValueChange = onMessageTextChange,
