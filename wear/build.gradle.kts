@@ -66,6 +66,9 @@ android {
 // onboarding, nostr (except pure-Kotlin Bech32), net, geohash, wifi-aware, hotspot, voice
 // features, and the phone's foreground service.
 val sharedSourceIncludes = listOf(
+    // EventPulse payload model (Gson-only, no Android deps) — referenced by
+    // com/bitchat/android/mesh/MessageHandler.kt for JSON payload detection.
+    "com/eventpulse/mesh/EventPulsePacket.kt",
     "com/bitchat/android/protocol/**",
     "com/bitchat/android/noise/**",
     "com/bitchat/android/crypto/**",
