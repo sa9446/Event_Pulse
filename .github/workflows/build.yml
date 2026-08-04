@@ -1,10 +1,10 @@
 # ============================================================
-# EventPulse CI — Build, Test & Static Analysis
+# Dead Air CI — Build, Test & Static Analysis
 # ============================================================
 # Runs on every push and PR to ensure the project compiles,
 # tests pass, and code quality is maintained.
 
-name: EventPulse CI
+name: Dead Air CI
 
 on:
   push:
@@ -175,7 +175,7 @@ jobs:
     steps:
       - name: Check status
         run: |
-          echo "## EventPulse CI Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## Dead Air CI Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY

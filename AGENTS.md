@@ -57,10 +57,10 @@ The application follows a clean architecture pattern, heavily modularized by fea
 - **Unit Tests**: Located in `app/src/test/`. Use for business logic, protocols, and utility testing.
 - **Instrumented Tests**: Located in `app/src/androidTest/`. Use for UI and permission integration testing.
 - **Device Mesh Tests (ADB test hooks)**: Two-physical-device scenarios driven over ADB, **kept separate from Gradle/CI** — run them manually when changing mesh/crypto/transfer code. A debug-only broadcast receiver (`app/src/debug/java/com/bitchat/android/testhook/`, never in release builds) exposes mesh operations (scan, connect, Noise handshake, DMs, broadcast, files, raw packet injection) via `am broadcast -a com.bitchat.droid.TEST_HOOK`; the host orchestrator is `tools/release_gate/mesh_lab.py`. Full guide: `docs/release-gate-runbook.md` appendix "mesh lab".
-  - Prereqs: `adb` on PATH, Python 3.10+, two devices with USB debugging, **both unlocked with screen on** (locked/dozing → POWER_SAVER → flaky timing).
-  - Setup: `./gradlew assembleDebug && python3 tools/release_gate/mesh_lab.py setup --serial-a <s1> --serial-b <s2> --apk app/build/outputs/apk/debug/app-arm64-v8a-debug.apk`
-  - Run: `python3 tools/release_gate/mesh_lab.py scenario all --serial-a <s1> --serial-b <s2> --out /tmp/meshlab-evidence`
-  - Scenarios: `dm`, `broadcast`, `file`, `file_oversize`, `file_private`, `raw`, `session_recovery`, `identity_reset`, `all`. Ad-hoc: `... cmd --serial <s> state`.
+  - Prereqs: `adb` on PATH, Python 3.10+, two devices with USB debugging (three for `multi_hop`), **all unlocked with screen on** (locked/dozing → POWER_SAVER → flaky timing).
+  - Setup: `./gradlew assembleDebug && python3 tools/release_gate/mesh_lab.py setup --serial-a <s1> --serial-b <s2> --apk app/build/outputs/apk/debug/app-arm64-v8a-debug.apk` (add `--serial-c <s3>` for three-phone multi-hop)
+  - Run: `python3 tools/release_gate/mesh_lab.py scenario all --serial-a <s1> --serial-b <s2> --out /tmp/meshlab-evidence` (add `--serial-c <s3>` to include `multi_hop`)
+  - Scenarios: `dm`, `broadcast`, `file`, `file_oversize`, `file_private`, `raw`, `session_recovery`, `identity_reset`, `multi_hop` (3 phones, A→B→C relay), `all`. Ad-hoc: `... cmd --serial <s> state`.
 - **Execution**:
   - Unit: `./gradlew test`
   - Instrumented: `./gradlew connectedAndroidTest`
@@ -74,6 +74,12 @@ The application follows a clean architecture pattern, heavily modularized by fea
 - **Build Debug APK**: `./gradlew assembleDebug`
 - **Lint Check**: `./gradlew lint`
 - **Clean Build**: `./gradlew clean`
+
+## 7. APK Workflow (user preference — REQUIRED)
+- **The canonical APK is `app/build/outputs/apk/release/app-universal-release.apk`.** Whenever the user asks for app changes, rebuild the app and update THIS file.
+- After producing the new APK, **delete the older APK file(s)** so only the newest canonical APK remains — never accumulate multiple variants/duplicates.
+- Suggested flow: `./gradlew assembleRelease`, verify the canonical APK was regenerated, then `find app/build/outputs/apk -name '*.apk' ! -name 'app-universal-release.apk' -delete`.
+- Note: `assembleRelease` alone also leaves per-ABI duplicates (arm64, x86, etc.) in `app/build/outputs/apk/release/` — remove those too, keeping only the universal release APK.
 
 ---
 *Note: This file is intended to assist AI agents in navigating and modifying the codebase efficiently. Always verify context by reading the actual files before making changes.*

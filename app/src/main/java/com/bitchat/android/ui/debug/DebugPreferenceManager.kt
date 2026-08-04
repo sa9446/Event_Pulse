@@ -24,6 +24,7 @@ object DebugPreferenceManager {
     private const val KEY_BLE_ENABLED = "ble_enabled"
     private const val KEY_WIFI_AWARE_ENABLED = "wifi_aware_enabled"
     private const val KEY_WIFI_AWARE_VERBOSE = "wifi_aware_verbose"
+    private const val KEY_WIFI_DIRECT_ENABLED = "wifi_direct_enabled"
 
     private lateinit var prefs: SharedPreferences
 
@@ -113,7 +114,7 @@ object DebugPreferenceManager {
         if (ready()) prefs.edit().putBoolean(KEY_BLE_ENABLED, value).apply()
     }
 
-    fun getWifiAwareEnabled(default: Boolean = false): Boolean =
+    fun getWifiAwareEnabled(default: Boolean = true): Boolean =
         if (ready()) prefs.getBoolean(KEY_WIFI_AWARE_ENABLED, default) else default
 
     fun setWifiAwareEnabled(value: Boolean) {
@@ -125,5 +126,12 @@ object DebugPreferenceManager {
 
     fun setWifiAwareVerbose(value: Boolean) {
         if (ready()) prefs.edit().putBoolean(KEY_WIFI_AWARE_VERBOSE, value).apply()
+    }
+
+    fun getWifiDirectEnabled(default: Boolean = true): Boolean =
+        if (ready()) prefs.getBoolean(KEY_WIFI_DIRECT_ENABLED, default) else default
+
+    fun setWifiDirectEnabled(value: Boolean) {
+        if (ready()) prefs.edit().putBoolean(KEY_WIFI_DIRECT_ENABLED, value).apply()
     }
 }

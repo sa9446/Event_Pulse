@@ -7,6 +7,7 @@ import com.bitchat.android.model.BitchatMessageType
 import com.bitchat.android.model.AuthenticatedPeerState
 import com.bitchat.android.model.RoutedPacket
 import com.bitchat.android.protocol.BitchatPacket
+import com.bitchat.android.protocol.EncryptedChannelWire
 import com.bitchat.android.protocol.MessageType
 import com.bitchat.android.sync.PacketIdUtil
 import com.bitchat.android.util.toHexString
@@ -415,7 +416,7 @@ class MessageHandler(private val myPeerID: String, private val appContext: andro
     
     /**
      * Handle broadcast message with verification enforcement
-     * Includes EventPulse JSON payload detection and routing.
+     * Includes Dead Air JSON payload detection and routing.
      */
     private suspend fun handleBroadcastMessage(routed: RoutedPacket) {
         val packet = routed.packet
@@ -449,13 +450,13 @@ class MessageHandler(private val myPeerID: String, private val appContext: andro
                 Log.w(TAG, "FILE_TRANSFER decode failed (broadcast) from ${peerID.take(8)}")
             }
 
-            // ── EventPulse: Check for structured JSON payload ───────────
+            // ── Dead Air: Check for structured JSON payload ───────────
             val rawContent = String(packet.payload, Charsets.UTF_8)
             if (EventPulsePayload.isEventPulsePayload(packet.payload)) {
                 val epPayload = EventPulsePayload.fromByteArray(packet.payload)
                 if (epPayload != null) {
-                    Log.d(TAG, "EventPulse JSON message on channel '${epPayload.channel}' from $peerID")
-                    // Route via ChatViewModel's EventPulse handler through onMessageReceived
+                    Log.d(TAG, "Dead Air JSON message on channel '${epPayload.channel}' from $peerID")
+                    // Route via ChatViewModel's Dead Air handler through onMessageReceived
                     val eventPulseMessage = BitchatMessage(
                         id = PacketIdUtil.computeIdHex(packet).uppercase(),
                         sender = epPayload.sender,
@@ -467,6 +468,25 @@ class MessageHandler(private val myPeerID: String, private val appContext: andro
                     delegate?.onMessageReceived(eventPulseMessage)
                     return
                 }
+            }
+
+            // ── Encrypted channel message: DAENC:<channel>:<base64(iv+ciphertext)> ──
+            val encryptedWire = EncryptedChannelWire.parse(rawContent)
+            if (encryptedWire != null) {
+                val (encChannel, ciphertext) = encryptedWire
+                val plaintext = delegate?.decryptChannelMessage(ciphertext, encChannel)
+                val message = BitchatMessage(
+                    id = PacketIdUtil.computeIdHex(packet).uppercase(),
+                    sender = delegate?.getPeerNickname(peerID) ?: "unknown",
+                    content = plaintext
+                        ?: EncryptedChannelWire.PLACEHOLDER,
+                    senderPeerID = peerID,
+                    channel = encChannel,
+                    isEncrypted = true,
+                    timestamp = Date(packet.timestamp.toLong())
+                )
+                delegate?.onMessageReceived(message)
+                return
             }
 
             // Fallback: plain text

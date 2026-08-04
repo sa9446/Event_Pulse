@@ -3,7 +3,6 @@ package com.bitchat.android.ui
 import android.util.Log
 import com.bitchat.android.model.BitchatMessage
 import com.eventpulse.mesh.CrowdDensityCalculator
-import com.eventpulse.mesh.EventPulseSOSHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -79,12 +78,6 @@ class ChatState(
 
     private val _channelTabUnreadCounts = MutableStateFlow<Map<com.eventpulse.mesh.EventChannel, Int>>(emptyMap())
     val channelTabUnreadCounts: StateFlow<Map<com.eventpulse.mesh.EventChannel, Int>> = _channelTabUnreadCounts.asStateFlow()
-
-    private val _activeSOSAlert = MutableStateFlow<com.eventpulse.mesh.SOSAlert?>(null)
-    val activeSOSAlert: StateFlow<com.eventpulse.mesh.SOSAlert?> = _activeSOSAlert.asStateFlow()
-
-    private val _isSOSModeActive = MutableStateFlow(false)
-    val isSOSModeActive: StateFlow<Boolean> = _isSOSModeActive.asStateFlow()
 
     private val _passwordProtectedChannels = MutableStateFlow<Set<String>>(emptySet())
     val passwordProtectedChannels: StateFlow<Set<String>> = _passwordProtectedChannels.asStateFlow()
@@ -221,8 +214,6 @@ class ChatState(
     fun getSelectedEventChannelValue() = _selectedEventChannel.value
     fun getVenueDensityValue() = _venueDensity.value
     fun getChannelTabUnreadCountsValue() = _channelTabUnreadCounts.value
-    fun getActiveSOSAlertValue() = _activeSOSAlert.value
-    fun getIsSOSModeActiveValue() = _isSOSModeActive.value
     
     // Setters for state updates
     fun setMessages(messages: List<BitchatMessage>) {
@@ -291,13 +282,6 @@ class ChatState(
         _channelTabUnreadCounts.value = counts
     }
 
-    fun setActiveSOSAlert(alert: com.eventpulse.mesh.SOSAlert?) {
-        _activeSOSAlert.value = alert
-    }
-
-    fun setIsSOSModeActive(active: Boolean) {
-        _isSOSModeActive.value = active
-    }
     
     fun setShowPasswordPrompt(show: Boolean) {
         _showPasswordPrompt.value = show

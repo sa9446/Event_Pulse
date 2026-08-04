@@ -258,8 +258,10 @@ host (`cache/testhook/results/<id>.json`, also logged under tag `TestHook`).
   Android SDK platform-tools. `adb` must be on `PATH` or `ANDROID_HOME` set.
 - Python 3.10+ on the host. No third-party packages are required.
 - **Two physical Android devices** (API 26+, BLE) with USB debugging enabled,
-  both plugged into the host. Emulators are not supported (BLE mesh).
-- Verify both are visible: `adb devices` → note the serials.
+  both plugged into the host — plus a **third phone** for the multi-hop relay
+  scenarios (`multi_hop`, and `all` with `--serial-c`). Emulators are not
+  supported (BLE mesh).
+- Verify all are visible: `adb devices` → note the serials.
 
 ### Device preparation (important)
 
@@ -279,6 +281,12 @@ python3 tools/release_gate/mesh_lab.py setup \
   --serial-a <serial-1> --serial-b <serial-2> \
   --apk app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
 ```
+
+For three-phone multi-hop (A-B-C relay) testing, add `--serial-c <serial-3>`.
+Keep phone C physically out of range of phone A (hub B sits between them); the
+harness provisions each device once and confirms the A<->B and B<->C hops, but
+does not establish or assert an A-C link — the `multi_hop` scenario asserts that
+A's DM still reaches C through B.
 
 `setup` cycles Bluetooth, installs the APK, clears app data, grants all
 runtime permissions, wakes and launches the app, sets deterministic nicknames
@@ -305,7 +313,8 @@ python3 tools/release_gate/mesh_lab.py scenario all \
 | `raw` | raw packet injection is accepted by the mesh |
 | `session_recovery` | force-stop B mid-session: identity persists, re-handshake, DMs flow again |
 | `identity_reset` | pm clear B mid-session: new identity, rediscovery, handshake, DMs |
-| `all` | every scenario above in sequence |
+| `multi_hop` | three phones (A-B-C line): A's Noise handshake and DM to C arrive via hub B; asserts A holds no direct link to C and that hub B's `route_metrics` show relay activity |
+| `all` | every scenario above in sequence; includes `multi_hop` when `--serial-c` is given |
 
 Each run writes `<scenario>-evidence.json` to `--out` (digests, timings,
 session states, logcat excerpts on failure) and exits non-zero on failure.
@@ -326,7 +335,9 @@ See `TestHookDriver.kt` for the full command set (`ping`, `start`, `stop`,
 `whoami`, `set_nickname`, `scan`, `peers`, `connect`, `handshake`, `session`,
 `announce`, `broadcast_msg`, `dm_send`, `dm_recv`, `msg_recv`, `favorite_set`,
 `favorite_status`, `verification_set`, `verification_status`, `file_send`,
-`file_recv`, `file_cancel`, `raw_send`, `ble`, `state`, `clear_results`).
+`file_recv`, `file_cancel`, `raw_send`, `ble`, `state`, `route_metrics`,
+`clear_results`). The `route_metrics` and `state`-embedded metric dumps require
+the current debug build — a stale APK will answer `unknown command`/omit them.
 
 ### Troubleshooting
 

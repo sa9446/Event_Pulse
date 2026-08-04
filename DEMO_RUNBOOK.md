@@ -1,6 +1,6 @@
-# EventPulse — Two-Device Demo Runbook
+# Dead Air — Two-Device Demo Runbook
 
-Practical, step-by-step runbook for demoing EventPulse on two Android phones
+Practical, step-by-step runbook for demoing Dead Air on two Android phones
 over BLE mesh. Pair this with [DEMO_SCRIPT.md](DEMO_SCRIPT.md) for the filming
 storyboard.
 
@@ -40,7 +40,7 @@ adb -s <deviceB-serial> install -r app/build/outputs/apk/release/app-universal-r
 
 ### First-run setup (do this BEFORE the demo, on both phones)
 
-1. Open EventPulse → grant **Bluetooth**, **Nearby devices** (Android 12+), and
+1. Open Dead Air → grant **Bluetooth**, **Nearby devices** (Android 12+), and
    **Location** permissions.
 2. Set a distinct nickname on each device (e.g. **"Alice"** and **"Bob"**) so
    message senders are identifiable.

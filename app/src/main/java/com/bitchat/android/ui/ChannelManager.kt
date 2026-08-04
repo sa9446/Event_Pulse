@@ -7,6 +7,7 @@ import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 import com.bitchat.android.model.BitchatMessage
+import com.bitchat.android.protocol.EncryptedChannelWire
 import java.util.*
 
 /**
@@ -119,8 +120,17 @@ class ChannelManager(
     // MARK: - Channel Password and Encryption
     
     private fun verifyChannelPassword(channel: String, password: String): Boolean {
-        // TODO: REMOVE THIS - FOR TESTING ONLY
-        return true
+        if (password.isEmpty()) return false
+        return try {
+            // The password IS the shared channel secret: PBKDF2(password, channel) derives the same
+            // key on every device that enters the correct password. Wrong passwords produce a
+            // different key, and GCM tag verification (not this boolean) is the real gate.
+            channelKeys[channel] = deriveChannelKey(password, channel)
+            channelPasswords[channel] = password
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
     
     private fun deriveChannelKey(password: String, channelName: String): SecretKeySpec {
@@ -170,8 +180,24 @@ class ChannelManager(
         onEncryptedPayload: (ByteArray) -> Unit,
         onFallback: () -> Unit
     ) {
-        // TODO: REIMPLEMENT – REMOVED FOR NOW
-        return
+        val key = channelKeys[channel]
+        if (key == null) {
+            onFallback()
+            return
+        }
+        try {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, key)
+
+            val iv = cipher.iv
+            val ciphertext = cipher.doFinal(content.toByteArray(Charsets.UTF_8))
+
+            val wire = EncryptedChannelWire.encode(channel, iv, ciphertext)
+            onEncryptedPayload(wire.toByteArray(Charsets.UTF_8))
+        } catch (e: Exception) {
+            // Encryption is best-effort: never silently drop a message.
+            onFallback()
+        }
     }
     
     // MARK: - Channel Management

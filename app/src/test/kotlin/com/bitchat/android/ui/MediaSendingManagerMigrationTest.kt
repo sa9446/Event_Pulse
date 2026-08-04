@@ -103,6 +103,22 @@ class MediaSendingManagerMigrationTest {
     }
 
     @Test
+    fun `transport flavored rejection is retried instead of failing immediately`() {
+        // A route/transport rejection (e.g. first hop unreachable) must retain the first-send
+        // intent and retry — no immediate failure message, no echo, no send. Policy rejections
+        // are covered by the other rejection tests, which fail fast.
+        whenever(mesh.prepareFilePrivate(eq(peerID), any(), any(), eq(false)))
+            .thenReturn(PrivateMediaPreparation.Rejected("No local transport is available for this peer"))
+
+        manager.sendImageNote(peerID, null, file.absolutePath)
+
+        val messages = state.privateChats.value[peerID].orEmpty()
+        assertEquals(0, messages.size)
+        assertEquals(null, manager.legacyPrivateMediaConsent.value)
+        verify(mesh, never()).sendFilePrivate(any(), any())
+    }
+
+    @Test
     fun `private preparation runs on the configured media worker`() {
         val executor = Executors.newSingleThreadExecutor { runnable ->
             Thread(runnable, "private-media-test-worker")

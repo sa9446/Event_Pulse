@@ -13,7 +13,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "EventPulse-Mesh"
+rootProject.name = "DeadAir"
 include(":app")
 include(":wear")
 // Using published Arti AAR; local module not included

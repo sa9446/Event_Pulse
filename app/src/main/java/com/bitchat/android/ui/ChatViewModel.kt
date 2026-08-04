@@ -388,8 +388,6 @@ class ChatViewModel(
     val selectedEventChannel: StateFlow<EventChannel> = state.selectedEventChannel
     val venueDensity: StateFlow<CrowdDensityCalculator.VenueDensity> = state.venueDensity
     val channelTabUnreadCounts: StateFlow<Map<EventChannel, Int>> = state.channelTabUnreadCounts
-    val activeSOSAlert: StateFlow<SOSAlert?> = state.activeSOSAlert
-    val isSOSModeActive: StateFlow<Boolean> = state.isSOSModeActive
     val peerDirect: StateFlow<Map<String, Boolean>> = state.peerDirect
     val showAppInfo: StateFlow<Boolean> = state.showAppInfo
     val showMeshPeerList: StateFlow<Boolean> = state.showMeshPeerList
@@ -949,8 +947,8 @@ class ChatViewModel(
                         channel,
                         state.getNicknameValue(),
                         mesh.myPeerID,
-                        onEncryptedPayload = {
-                            mesh.sendMessage(messageContent, mentions, channel)
+                        onEncryptedPayload = { encryptedData ->
+                            mesh.sendMessage(String(encryptedData, Charsets.UTF_8), mentions, channel)
                         },
                         onFallback = {
                             mesh.sendMessage(messageContent, mentions, channel)
@@ -1047,7 +1045,7 @@ class ChatViewModel(
                             state.getNicknameValue(),
                             mesh.myPeerID,
                             onEncryptedPayload = { encryptedData ->
-                                mesh.sendMessage(content, mentions, currentChannelValue)
+                                mesh.sendMessage(String(encryptedData, Charsets.UTF_8), mentions, currentChannelValue)
                             },
                             onFallback = {
                                 mesh.sendMessage(content, mentions, currentChannelValue)
@@ -1797,19 +1795,6 @@ class ChatViewModel(
         // Feature C: Rate limiting check
         if (!EventPulseRateLimiter.shouldAcceptIncoming(senderPeerID, payload.body)) return
 
-        // Feature D: SOS bypass
-        if (payload.type == "SOS") {
-            val alert = SOSAlert(
-                senderName = payload.sender,
-                senderPeerID = senderPeerID,
-                message = payload.body
-            )
-            if (EventPulseSOSHandler.registerSOS(alert)) {
-                state.setActiveSOSAlert(alert)
-            }
-            return
-        }
-
         // Feature A: RETRACT handling
         if (payload.type == "RETRACT") {
             val targetMsgId = payload.target_msg_id
@@ -1865,32 +1850,6 @@ class ChatViewModel(
         }
     }
 
-    /**
-     * Send an SOS emergency message over the mesh.
-     */
-    fun sendSOS() {
-        val nickname = state.nickname.value.ifBlank { mesh.myPeerID }
-        val sosMessage = "EMERGENCY: $nickname needs help!"
-        val payload = EventPulsePayload(
-            msg_id = EventPulsePayload.generateMessageId(mesh.myPeerID),
-            sender = nickname,
-            channel = "general",
-            type = "SOS",
-            body = sosMessage
-        )
-        val jsonBytes = EventPulsePayload.toByteArray(payload)
-        if (jsonBytes != null) {
-            sendMessage(String(jsonBytes, Charsets.UTF_8))
-            state.setIsSOSModeActive(true)
-        }
-    }
-
-    fun dismissSOSAlert() {
-        EventPulseSOSHandler.dismissAllAlerts()
-        state.setActiveSOSAlert(null)
-        state.setIsSOSModeActive(false)
-    }
-
     // ── Phase 3A: Mesh Recall (Retraction) ─────────────────────────────
 
     /**
@@ -1923,64 +1882,5 @@ class ChatViewModel(
     }
 
     // ── Phase 3B: Quick Media Send ────────────────────────────────────
-
-    /**
-     * Send a photo captured in-app: compress to WebP, chunk, and broadcast.
-     */
-    fun sendCapturedPhoto(filePath: String) {
-        val compressed = EventPulseMediaChunker.compressImage(filePath)
-        if (compressed == null) {
-            Log.w(TAG, "Failed to compress photo, sending raw")
-            sendFileToMesh(filePath, "image/jpeg")
-            return
-        }
-        sendBytesToMesh(compressed, "photo", "image/webp")
-    }
-
-    /**
-     * Send a voice note captured in-app: chunk and broadcast.
-     */
-    fun sendCapturedVoice(filePath: String) {
-        val bytes = java.io.File(filePath).readBytes()
-        sendBytesToMesh(bytes, "voice", "audio/aac")
-    }
-
-    private fun sendBytesToMesh(data: ByteArray, prefix: String, mimeType: String) {
-        val nickname = state.nickname.value.ifBlank { mesh.myPeerID }
-        val fileId = EventPulseMediaChunker.generateFileId(prefix)
-        val channel = state.selectedEventChannel.value.name.lowercase()
-
-        val chunked = EventPulseMediaChunker.chunkBytes(
-            data = data,
-            fileId = fileId,
-            mimeType = mimeType,
-            sender = nickname,
-            channel = channel
-        )
-
-        // PERF: Send chunks in parallel batches for faster mesh throughput
-        viewModelScope.launch {
-            EventPulseMediaChunker.sendChunksParallel(
-                result = chunked,
-                scope = this,
-                sendOne = { chunk ->
-                    val bytes = EventPulsePayload.toByteArray(chunk)
-                    if (bytes != null) {
-                        sendMessage(String(bytes, Charsets.UTF_8))
-                    }
-                },
-                batchSize = 4
-            )
-        }
-    }
-
-    private fun sendFileToMesh(filePath: String, mimeType: String) {
-        try {
-            val bytes = java.io.File(filePath).readBytes()
-            sendBytesToMesh(bytes, "file", mimeType)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to send file: ${e.message}")
-        }
-    }
 
 }

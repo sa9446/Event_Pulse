@@ -599,6 +599,16 @@ fun MessageInput(
                                         )
                                     }
                                 )
+                                Spacer(Modifier.width(2.dp))
+                                FilePickerButton(
+                                    onFileReady = { outPath ->
+                                        onSendFileNote(
+                                            latestSelectedPeer.value,
+                                            latestChannel.value,
+                                            outPath
+                                        )
+                                    }
+                                )
                             }
 
                             // The slide-to-cancel target sits well clear of the record

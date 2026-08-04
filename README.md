@@ -1,4 +1,4 @@
-# EventPulse 🎯
+# Dead Air 🎯
 
 **Offline, serverless event engagement & crowd dynamics platform** — powered by BLE mesh networking.
 
@@ -11,7 +11,7 @@
 
 ## 📋 Overview
 
-EventPulse transforms any venue into a connected, offline-first experience using Bluetooth Low Energy (BLE) mesh networking. No WiFi, no cellular data, no servers needed. Every device becomes both a node and a relay, creating a resilient ad-hoc communication network.
+Dead Air transforms any venue into a connected, offline-first experience using Bluetooth Low Energy (BLE) mesh networking. No WiFi, no cellular data, no servers needed. Every device becomes both a node and a relay, creating a resilient ad-hoc communication network.
 
 ### Built for Hackathons 🏆
 
@@ -59,7 +59,7 @@ This was built from the ground up as a **judge-ready hackathon submission**, sho
 ## 🏗️ Architecture
 
 ```
-com.eventpulse.mesh/           # New EventPulse features
+com.eventpulse.mesh/           # New Dead Air features
 ├── EventPulsePacket.kt        # JSON payload model (512B max)
 ├── CrowdDensityCalculator.kt  # RSSI-based crowd density
 ├── EventPulseRateLimiter.kt   # 280-char + rate limiting
@@ -162,7 +162,7 @@ org.gradle.java.home=C:/Program Files/Eclipse Adoptium/jdk-21.0.12.8-hotspot
 
 ## 🧪 Testing
 
-Unit tests for EventPulse features are in `app/src/test/java/com/eventpulse/mesh/`:
+Unit tests for Dead Air features are in `app/src/test/java/com/eventpulse/mesh/`:
 
 | Test | File |
 |------|------|
@@ -200,7 +200,7 @@ The app includes a baseline profile at `app/src/main/baseline-prof.txt` with 80+
 - Application & Activity entry points
 - Mesh service stack (20+ classes)
 - Protocol & crypto layers
-- EventPulse feature classes
+- Dead Air feature classes
 - Compose hot paths (LazyColumn, Surface, etc.)
 - Coroutines & Lifecycle
 
@@ -212,7 +212,7 @@ This ensures **AOT compilation on install** — no JIT warmup on first launch.
 
 This project is a fork/modification of [bitchat-android](https://github.com/permissionlesstech/bitchat-android) by Permissionless Tech. All original code retains its license.
 
-New EventPulse additions are provided under the MIT License.
+New Dead Air additions are provided under the MIT License.
 
 ---
 

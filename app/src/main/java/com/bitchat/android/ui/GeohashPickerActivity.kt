@@ -160,8 +160,8 @@ class GeohashPickerActivity : OrientationAwareActivity() {
                     }
                 }
 
-                val labelTypeface = remember { ResourcesCompat.getFont(context, R.font.geist_mono_medium) }
-                val labelTypefaceBold = remember { ResourcesCompat.getFont(context, R.font.geist_mono_semibold) }
+                val labelTypeface = remember { ResourcesCompat.getFont(context, R.font.plus_jakarta_sans_medium) }
+                val labelTypefaceBold = remember { ResourcesCompat.getFont(context, R.font.plus_jakarta_sans_semibold) }
 
                 Box(
                     Modifier

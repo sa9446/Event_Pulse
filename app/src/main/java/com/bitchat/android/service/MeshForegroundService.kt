@@ -216,6 +216,12 @@ class MeshForegroundService : Service() {
         }
 
         try {
+            com.bitchat.android.wifidirect.WifiDirectController.startIfPossible()
+        } catch (e: Exception) {
+            android.util.Log.e("MeshForegroundService", "Failed to ensure Wi-Fi Direct transport: ${e.message}")
+        }
+
+        try {
             android.util.Log.d("MeshForegroundService", "Ensuring mesh service is started")
             val service = MeshServiceHolder.getUnifiedOrCreate(applicationContext)
             service.startServices()
@@ -285,7 +291,7 @@ class MeshForegroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0)
         )
 
-        // Action: Quit Bitchat
+        // Action: Quit Dead Air
         val quitIntent = Intent(this, MeshForegroundService::class.java).apply { action = ACTION_QUIT }
         val quitPendingIntent = PendingIntent.getService(
             this, 1, quitIntent,
@@ -307,7 +313,7 @@ class MeshForegroundService : Service() {
             // Add an action button that appears when notification is expanded
             .addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,
-                getString(R.string.notification_action_quit_bitchat),
+                getString(R.string.notification_action_quit_app),
                 quitPendingIntent
             )
             .build()

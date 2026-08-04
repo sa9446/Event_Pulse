@@ -4,6 +4,7 @@ import com.bitchat.android.protocol.MessageType
 import android.util.Log
 import com.bitchat.android.model.RoutedPacket
 import com.bitchat.android.protocol.BitchatPacket
+import com.bitchat.android.services.meshgraph.RouteMetrics
 import com.bitchat.android.util.toHexString
 import kotlinx.coroutines.*
 import kotlin.random.Random
@@ -58,43 +59,56 @@ class PacketRelayManager(private val myPeerID: String) {
         // Check TTL and decrement
         if (packet.ttl == 0u.toUByte()) {
             Log.d(TAG, "TTL expired, not relaying packet")
+            RouteMetrics.recordRoutedDrop()
             return
         }
         
-        // Decrement TTL by 1
-        val relayPacket = packet.copy(ttl = (packet.ttl - 1u).toUByte())
+        // Decrement TTL by 1 (mutable so the source-route fallback can strip the route)
+        var relayPacket = packet.copy(ttl = (packet.ttl - 1u).toUByte())
         Log.d(TAG, "Decremented TTL from ${packet.ttl} to ${relayPacket.ttl}")
         
-        // Source-based routing: if route is set and includes us, try targeted next-hop forwarding
+        // Source-based routing: if route is set, we are an intermediate hop on an explicit path.
+        // Forward ONLY to the next hop on that path. Off-route nodes must drop the packet so a
+        // source-routed transfer does not degenerate into a network-wide flood.
         val route = relayPacket.route
         if (!route.isNullOrEmpty()) {
             // Check for duplicate hops to prevent routing loops
             if (route.map { it.toHexString() }.toSet().size < route.size) {
                 Log.w(TAG, "Packet with duplicate hops dropped")
+                RouteMetrics.recordRoutedDrop()
                 return
             }
             val myIdBytes = hexStringToPeerBytes(myPeerID)
             val index = route.indexOfFirst { it.contentEquals(myIdBytes) }
-            if (index >= 0) {
-                val nextHopIdHex: String? = run {
-                    val nextIndex = index + 1
-                    if (nextIndex < route.size) {
-                        route[nextIndex].toHexString()
-                    } else {
-                        // We are the last intermediate; try final recipient as next hop
-                        relayPacket.recipientID?.toHexString()
-                    }
-                }
-                if (nextHopIdHex != null) {
-                    val success = try { delegate?.sendToPeer(nextHopIdHex, RoutedPacket(relayPacket, peerID, routed.relayAddress)) } catch (_: Exception) { false } ?: false
-                    if (success) {
-                        Log.i(TAG, "📦 Source-route relay: ${peerID.take(8)} -> ${nextHopIdHex.take(8)} (type ${'$'}{packet.type}, TTL ${'$'}{relayPacket.ttl})")
-                        return
-                    } else {
-                        Log.w(TAG, "Source-route next hop ${nextHopIdHex.take(8)} not directly connected; falling back to broadcast")
-                    }
+            if (index < 0) {
+                // We are not part of this source route: do not forward.
+                Log.d(TAG, "Dropping source-routed packet not on our path (type ${packet.type})")
+                RouteMetrics.recordRoutedDrop()
+                return
+            }
+            val nextHopIdHex: String? = run {
+                val nextIndex = index + 1
+                if (nextIndex < route.size) {
+                    route[nextIndex].toHexString()
+                } else {
+                    // We are the last intermediate; try final recipient as next hop
+                    relayPacket.recipientID?.toHexString()
                 }
             }
+            if (nextHopIdHex != null) {
+                val success = try { delegate?.sendToPeer(nextHopIdHex, RoutedPacket(relayPacket, peerID, routed.relayAddress)) } catch (_: Exception) { false } ?: false
+                if (success) {
+                    Log.i(TAG, "📦 Source-route relay: ${peerID.take(8)} -> ${nextHopIdHex.take(8)} (type ${'$'}{packet.type}, TTL ${'$'}{relayPacket.ttl})")
+                    return
+                } else {
+                    Log.w(TAG, "Source-route next hop ${nextHopIdHex.take(8)} not directly connected; falling back to broadcast")
+                }
+            }
+            // Strip the source route on the fallback so the flood reaches off-route nodes too.
+            // A stale route (graph edge died after computation) must not strand the packet: once
+            // the next hop is unreachable, delivery relies on the network-wide flood.
+            relayPacket = relayPacket.copy(route = null)
+            RouteMetrics.recordFallbackFlood()
         }
 
         // Apply relay logic based on packet type and debug switch

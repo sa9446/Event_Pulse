@@ -42,8 +42,9 @@ class FragmentingPacketSenderTest {
     fun `oversized packet exceeding receiver fragment cap is rejected with fail event`() = runBlocking {
         val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
         val sender = FragmentingPacketSender(scope, FragmentManager(), "test")
-        // ~256 * 469 bytes fit; 1 MiB clearly exceeds MAX_FRAGMENTS_PER_ID
-        val packet = packetWithPayload(1024 * 1024)
+        // Clearly exceeds MAX_FRAGMENTS_PER_ID * MAX_FRAGMENT_SIZE (the sender-side ceiling)
+        val cap = com.bitchat.android.util.AppConstants.Fragmentation.MAX_FRAGMENTS_PER_ID
+        val packet = packetWithPayload(cap * com.bitchat.android.util.AppConstants.Fragmentation.MAX_FRAGMENT_SIZE + 1024)
         var sent = false
 
         val failed = java.util.concurrent.ConcurrentLinkedQueue<String>()

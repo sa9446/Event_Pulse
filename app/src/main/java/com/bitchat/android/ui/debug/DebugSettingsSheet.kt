@@ -33,6 +33,8 @@ import androidx.compose.ui.draw.rotate
 import com.bitchat.android.ui.theme.BitchatFontFamily
 import com.bitchat.android.mesh.BluetoothMeshService
 import com.bitchat.android.services.meshgraph.MeshGraphService
+import com.bitchat.android.services.meshgraph.RouteMetrics
+import com.bitchat.android.services.meshgraph.RoutePlanner
 import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -75,18 +77,62 @@ fun MeshTopologySection(
             if (empty) {
                 Text("No gossip yet", fontFamily = BitchatFontFamily, fontSize = 11.sp, color = colorScheme.onSurface.copy(alpha = 0.6f))
             } else {
+                // Live source routes from this device to every reachable peer (computed from
+                // the gossip graph each time the snapshot changes).
+                val activeRoutes = remember(snapshot, localPeerID) {
+                    if (localPeerID == null) {
+                        emptyList()
+                    } else {
+                        snapshot.nodes
+                            .map { it.peerID }
+                            .filter { it != localPeerID }
+                            .mapNotNull { target ->
+                                runCatching {
+                                    RoutePlanner.shortestPath(localPeerID, target)
+                                }.getOrNull()
+                            }
+                            .filter { it.size >= 2 }
+                    }
+                }
+                val nextHops = remember(activeRoutes) {
+                    activeRoutes.mapNotNull { if (it.size >= 2) it[1] else null }.distinct()
+                }
                 ForceDirectedMeshGraph(
                     nodes = nodes,
                     edges = edges,
                     wifiAwarePeerIDs = wifiAwarePeerIDs,
                     blePeerIDs = blePeerIDs,
                     localPeerID = localPeerID,
+                    activeRoutes = activeRoutes,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(300.dp)
                         .background(colorScheme.surface.copy(alpha = 0.4f))
                 )
-                
+
+                // Route legend: gold = active source route, ring = next hop
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        Modifier
+                            .size(width = 18.dp, height = 3.dp)
+                            .background(Color(0xFFFFD700), RoundedCornerShape(2.dp))
+                    )
+                    Text(
+                        text = if (activeRoutes.isEmpty()) {
+                            "No multi-hop routes yet"
+                        } else {
+                            "${activeRoutes.size} route${if (activeRoutes.size > 1) "s" else ""} · next hop${if (nextHops.size > 1) "s" else ""}: ${nextHops.joinToString(", ") { it.take(8) }}"
+                        },
+                        fontFamily = BitchatFontFamily,
+                        fontSize = 11.sp,
+                        color = colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+
                 // Flexible peer list
                 FlowRow(
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -104,6 +150,82 @@ fun MeshTopologySection(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun RouteMetricsSection() {
+    val colorScheme = MaterialTheme.colorScheme
+    val metrics by RouteMetrics.metrics.collectAsState()
+
+    Surface(shape = RoundedCornerShape(12.dp), color = colorScheme.surfaceVariant.copy(alpha = 0.2f)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Filled.SettingsEthernet, contentDescription = null, tint = Color(0xFFFFD700))
+                Text(
+                    "Route metrics",
+                    fontFamily = BitchatFontFamily,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            val transportIds = (metrics.relaySuccessByTransport.keys + metrics.relayFailureByTransport.keys)
+                .distinct()
+                .sorted()
+            if (transportIds.isEmpty()) {
+                Text(
+                    "No relay traffic yet",
+                    fontFamily = BitchatFontFamily,
+                    fontSize = 11.sp,
+                    color = colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            } else {
+                transportIds.forEach { id ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = id,
+                            fontFamily = BitchatFontFamily,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        val failed = metrics.relayFailureByTransport[id] ?: 0
+                        Text(
+                            text = "✓ ${metrics.relaySuccessByTransport[id] ?: 0}   ✗ $failed",
+                            fontFamily = BitchatFontFamily,
+                            fontSize = 11.sp,
+                            color = if (failed > 0) Color(0xFFFF6B6B)
+                            else colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+
+            Text(
+                text = "Routes planned: ${metrics.routesKnown} · path changes: ${metrics.pathChanges}",
+                fontFamily = BitchatFontFamily,
+                fontSize = 11.sp,
+                color = colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            val histogram = metrics.hopCountHistogram.entries.sortedBy { it.key }
+            Text(
+                text = if (histogram.isEmpty()) "Hop profile: —"
+                else "Hop profile: ${histogram.joinToString("  ") { "${it.key}-hop × ${it.value}" }}",
+                fontFamily = BitchatFontFamily,
+                fontSize = 11.sp,
+                color = colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            Text(
+                text = "Routed drops: ${metrics.routedDrops} · fallback floods: ${metrics.fallbackFloods}",
+                fontFamily = BitchatFontFamily,
+                fontSize = 11.sp,
+                color = colorScheme.onSurface.copy(alpha = 0.7f)
+            )
         }
     }
 }
@@ -162,7 +284,7 @@ private fun DistributionInfoSection(info: DistributionInfoProvider.DistributionI
                             val clipboard = context.getSystemService(ClipboardManager::class.java)
                             clipboard?.setPrimaryClip(
                                 ClipData.newPlainText(
-                                    "BitChat signing certificate SHA-256",
+                                    "Dead Air signing certificate SHA-256",
                                     info.certificateSha256
                                 )
                             )
@@ -231,6 +353,7 @@ fun DebugSettingsSheet(
     val bleEnabled by manager.bleEnabled.collectAsState()
     val wifiAwareEnabled by manager.wifiAwareEnabled.collectAsState()
     val wifiAwareVerbose by manager.wifiAwareVerbose.collectAsState()
+    val wifiDirectEnabled by manager.wifiDirectEnabled.collectAsState()
 
     // Onboarding only asks for these when the toggle is already on, and it defaults to off,
     // so enabling from here has to request them or the controller never starts.
@@ -386,6 +509,11 @@ fun DebugSettingsSheet(
                 )
             }
 
+            // Live multi-hop routing metrics
+            item {
+                RouteMetricsSection()
+            }
+
             // GATT controls
             item {
                 Surface(shape = RoundedCornerShape(12.dp), color = colorScheme.surfaceVariant.copy(alpha = 0.2f)) {
@@ -499,6 +627,44 @@ fun DebugSettingsSheet(
                             Spacer(Modifier.width(24.dp))
                             Text("Wi‑Fi Aware verbose logging", fontFamily = BitchatFontFamily, modifier = Modifier.weight(1f))
                             Switch(checked = wifiAwareVerbose, onCheckedChange = { manager.setWifiAwareVerbose(it) })
+                        }
+
+                        // Wi-Fi Direct (P2P) — high-bandwidth peer transport, runs alongside BLE + Aware
+                        val wifiDirectSupported = com.bitchat.android.wifidirect.WifiDirectSupport.isSupported(context)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Wi‑Fi Direct (P2P)",
+                                fontFamily = BitchatFontFamily,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (!wifiDirectSupported) {
+                                Text(
+                                    "unsupported",
+                                    fontFamily = BitchatFontFamily,
+                                    fontSize = 11.sp,
+                                    color = colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Switch(
+                                checked = wifiDirectEnabled && wifiDirectSupported,
+                                enabled = wifiDirectSupported,
+                                onCheckedChange = { on ->
+                                    if (on) {
+                                        val missing = wifiAwarePermissions.filter {
+                                            ContextCompat.checkSelfPermission(context, it) !=
+                                                PackageManager.PERMISSION_GRANTED
+                                        }
+                                        if (missing.isEmpty()) {
+                                            manager.setWifiDirectEnabled(true)
+                                        } else {
+                                            wifiAwarePermissionLauncher.launch(missing.toTypedArray())
+                                        }
+                                    } else {
+                                        manager.setWifiDirectEnabled(false)
+                                    }
+                                }
+                            )
                         }
                     }
                 }

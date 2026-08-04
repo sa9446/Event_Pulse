@@ -49,6 +49,10 @@ class BluetoothPacketBroadcaster(
     companion object {
         private const val TAG = "BluetoothPacketBroadcaster"
         private const val CLEANUP_DELAY = com.bitchat.android.util.AppConstants.Mesh.BROADCAST_CLEANUP_DELAY_MS
+        // Upper bound for waiting on the serialized actor to report whether at least one
+        // device accepted a broadcast write. A broadcast to several devices performs a
+        // synchronous GATT write per device, so keep this generous.
+        private const val BROADCAST_ACCEPT_TIMEOUT_MS = 10_000L
     }
 
     // Optional nickname resolver injected by higher layer (peerID -> nickname?)
@@ -146,8 +150,48 @@ class BluetoothPacketBroadcaster(
         characteristic: BluetoothGattCharacteristic?
     ): Boolean {
         return fragmentingSender.send(routed, "BLE broadcast") { packet ->
-            broadcastSinglePacket(packet, gattServer, characteristic)
-            true
+            // Await the transport acceptance so multi-fragment sends (files, voice notes)
+            // observe a failed write and can mark the transfer failed instead of reporting
+            // success while nothing was transmitted.
+            broadcastSinglePacketAndAwait(packet, gattServer, characteristic)
+        }
+    }
+
+    /**
+     * Submit one broadcast to the serialized actor and wait for the transport to accept
+     * it (any subscribed/connected peer) or report that no device accepted the write.
+     */
+    private fun broadcastSinglePacketAndAwait(
+        routed: RoutedPacket,
+        gattServer: BluetoothGattServer?,
+        characteristic: BluetoothGattCharacteristic?
+    ): Boolean {
+        val accepted = CompletableDeferred<Boolean>()
+        try {
+            broadcasterScope.launch {
+                try {
+                    broadcasterActor.send(
+                        BroadcastRequest(routed, gattServer, characteristic, accepted)
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to queue broadcast for acceptance wait: ${e.message}")
+                    try {
+                        accepted.complete(
+                            broadcastSinglePacketInternal(routed, gattServer, characteristic)
+                        )
+                    } catch (_: Exception) {
+                        accepted.complete(false)
+                    }
+                }
+            }
+            return kotlinx.coroutines.runBlocking {
+                kotlinx.coroutines.withTimeout(BROADCAST_ACCEPT_TIMEOUT_MS) { accepted.await() }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Broadcast acceptance wait failed: ${e.message}")
+            return false
         }
     }
 

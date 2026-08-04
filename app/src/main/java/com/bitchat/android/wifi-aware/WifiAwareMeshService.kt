@@ -66,8 +66,8 @@ class WifiAwareMeshService(private val context: Context) : MeshService, Transpor
     companion object {
         private const val TAG = "WifiAwareMeshService"
         private const val MAX_TTL: UByte = 7u
-        private const val SERVICE_NAME = "bitchat"
-        private const val PSK = "bitchat_secret"
+        private const val SERVICE_NAME = "eventpulse"
+        private const val PSK = "eventpulse_secret"
         // Network request / socket timeouts
         private const val NETWORK_REQUEST_TIMEOUT_MS = 30_000
         private const val ACCEPT_TIMEOUT_MS = 30_000
@@ -236,8 +236,8 @@ class WifiAwareMeshService(private val context: Context) : MeshService, Transpor
         return meshCore.sendFromBridgeAndReport(packet)
     }
 
-    override fun sendToPeer(peerID: String, packet: BitchatPacket) {
-        sendPacketToPeer(peerID, packet)
+    override fun sendToPeer(peerID: String, packet: BitchatPacket): Boolean {
+        return sendPacketToPeer(peerID, packet)
     }
 
     /**

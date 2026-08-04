@@ -6,7 +6,6 @@ import com.bitchat.android.ui.theme.ThemePreferenceManager
 import com.bitchat.android.net.ArtiTorManager
 import com.eventpulse.mesh.EventPulseMediaChunker
 import com.eventpulse.mesh.EventPulseRetractionManager
-import com.eventpulse.mesh.EventPulseSOSHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -14,7 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Main application class for EventPulse (forked from bitchat).
+ * Main application class for Dead Air (forked from bitchat).
  *
  * PERF: Startup-critical init runs synchronously on the main thread (Tor, PowerManager).
  * PERF: Non-critical init deferred to background IO thread so UI becomes interactive faster.
@@ -91,10 +90,16 @@ class BitchatApplication : Application() {
             com.bitchat.android.ui.debug.DebugPreferenceManager.init(this)
         } catch (_: Exception) {}
 
-        // Wi-Fi Aware controller
+        // Wi-Fi Aware controller (auto-enabled on supported devices; can be toggled in debug)
         try {
-            val enabled = com.bitchat.android.ui.debug.DebugPreferenceManager.getWifiAwareEnabled(false)
+            val enabled = com.bitchat.android.ui.debug.DebugPreferenceManager.getWifiAwareEnabled(true)
             com.bitchat.android.wifiaware.WifiAwareController.initialize(this, enabled)
+        } catch (_: Exception) {}
+
+        // Wi-Fi Direct (P2P) controller - runs in parallel with BLE + Aware for high-bandwidth data
+        try {
+            val enabled = com.bitchat.android.ui.debug.DebugPreferenceManager.getWifiDirectEnabled(true)
+            com.bitchat.android.wifidirect.WifiDirectController.initialize(this, enabled)
         } catch (_: Exception) {}
 
         // Geohash registries
@@ -121,7 +126,7 @@ class BitchatApplication : Application() {
             } catch (_: Exception) {}
         }
 
-        // ── EventPulse Feature Init ────────────────────────────────────
+        // ── Dead Air Feature Init ────────────────────────────────────
         // Start media chunker buffer cleanup scheduler
         EventPulseMediaChunker.startCleanupScheduler(deferredInitScope)
     }

@@ -11,16 +11,16 @@ import androidx.compose.ui.unit.sp
 import com.eventpulse.mesh.R
 
 /**
- * The bundled Geist Mono family used throughout the app.
+ * The bundled Plus Jakarta Sans family used throughout the app.
  *
  * Keeping the fonts in the APK preserves offline behavior and guarantees that the design-spec
- * metrics do not depend on which monospace family a device happens to provide.
+ * metrics do not depend on which sans-serif family a device happens to provide.
  */
 internal val BitchatFontFamily = FontFamily(
-    Font(R.font.geist_mono_regular, FontWeight.Normal),
-    Font(R.font.geist_mono_medium, FontWeight.Medium),
-    Font(R.font.geist_mono_semibold, FontWeight.SemiBold),
-    Font(R.font.geist_mono_bold, FontWeight.Bold),
+    Font(R.font.plus_jakarta_sans_regular, FontWeight.Normal),
+    Font(R.font.plus_jakarta_sans_medium, FontWeight.Medium),
+    Font(R.font.plus_jakarta_sans_semibold, FontWeight.SemiBold),
+    Font(R.font.plus_jakarta_sans_bold, FontWeight.Bold),
 )
 
 /** Exact typography, spacing, and opacity values exported for the chat transcript. */

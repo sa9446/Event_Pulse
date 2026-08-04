@@ -42,10 +42,13 @@ object AppConstants {
         const val MAX_FRAGMENT_SIZE: Int = 469
         const val FRAGMENT_TIMEOUT_MS: Long = 30_000L
         const val CLEANUP_INTERVAL_MS: Long = 10_000L
-        const val MAX_FRAGMENTS_PER_ID: Int = 256
-        const val MAX_FRAGMENT_TOTAL_BYTES: Int = 1_048_576
+        // ~462 bytes of payload per fragment; 10_000 fragments supports roughly 4 MB.
+        // Note: iOS peers running the upstream bitchat build only accept 256 fragments
+        // (~118 KB); Android-to-Android transfers can use the full range.
+        const val MAX_FRAGMENTS_PER_ID: Int = 10_000
+        const val MAX_FRAGMENT_TOTAL_BYTES: Int = 5 * 1_048_576
         const val MAX_ACTIVE_FRAGMENT_SETS: Int = 64
-        const val MAX_GLOBAL_FRAGMENT_TOTAL_BYTES: Long = 4L * 1_048_576L
+        const val MAX_GLOBAL_FRAGMENT_TOTAL_BYTES: Long = 16L * 1_048_576L
     }
 
     object Security {
@@ -130,9 +133,9 @@ object AppConstants {
     }
 
     object Media {
-        // A file is currently encoded into one protocol payload before BLE fragmentation.
-        // Reserve room for maximum filename/MIME TLVs and encryption envelope overhead.
-        const val MAX_FILE_SIZE_BYTES: Long = (10L * 1024 * 1024) - (132L * 1024)
+        // Practical mesh transfer ceiling: the fragmentation caps above support ~4 MB
+        // of payload. Anything larger is rejected up front with a clear message.
+        const val MAX_FILE_SIZE_BYTES: Long = 4L * 1024 * 1024
     }
 
     object Router {

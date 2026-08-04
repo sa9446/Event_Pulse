@@ -27,6 +27,7 @@
 
 # Gson (used by EventPulsePayload)
 -keepattributes Signature
+-keepattributes *Annotation*
 -keep class com.google.gson.** { *; }
 -keep class * implements com.google.gson.TypeAdapterFactory
 -keep class * implements com.google.gson.JsonSerializer

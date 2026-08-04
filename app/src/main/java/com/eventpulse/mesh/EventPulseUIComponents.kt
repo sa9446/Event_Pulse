@@ -137,37 +137,6 @@ fun EventChannelTabs(
     }
 }
 
-// ─── SOS Alert Banner ──────────────────────────────────────────────────
-
-@Composable
-fun SOSAlertBanner(alert: SOSAlert, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
-    val t = rememberInfiniteTransition(label = "sosPulse")
-    val bgAlpha by t.animateFloat(0.7f, 1f, infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "sosBgAlpha")
-    Surface(modifier = modifier.fillMaxWidth(), color = EventPulseColors.sosRed.copy(alpha = bgAlpha), tonalElevation = 8.dp, shadowElevation = 4.dp) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Warning, "SOS Alert", tint = Color.White, modifier = Modifier.size(22.dp))
-            Spacer(Modifier.width(8.dp))
-            Column(Modifier.weight(1f)) {
-                Text("🚨 EMERGENCY from ${alert.senderName}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1)
-                Text(alert.message, fontSize = 13.sp, color = Color.White.copy(alpha = 0.9f), maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-            IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, "Dismiss", tint = Color.White) }
-        }
-    }
-}
-
-// ─── SOS Quick-Action Button ───────────────────────────────────────────
-
-@Composable
-fun SOSActionButton(onSOS: () -> Unit, modifier: Modifier = Modifier) {
-    val t = rememberInfiniteTransition(label = "sosBtn")
-    val scale by t.animateFloat(1f, 1.08f, infiniteRepeatable(tween(1000), RepeatMode.Reverse), label = "sosBtnScale")
-    Surface(onClick = onSOS, modifier = modifier.size(52.dp).scale(scale), shape = CircleShape,
-        color = EventPulseColors.sosRed, tonalElevation = 6.dp, shadowElevation = 8.dp) {
-        Box(contentAlignment = Alignment.Center) { Text("SOS", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White) }
-    }
-}
-
 // ─── Verified Message Card ─────────────────────────────────────────────
 
 /**

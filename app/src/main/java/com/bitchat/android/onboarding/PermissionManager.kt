@@ -27,15 +27,22 @@ class PermissionManager(private val context: Context) {
 
     private fun shouldRequireWifiAwarePermission(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false
-        val enabled = try {
-            com.bitchat.android.ui.debug.DebugPreferenceManager.getWifiAwareEnabled(false)
+        val awareEnabled = try {
+            com.bitchat.android.ui.debug.DebugPreferenceManager.getWifiAwareEnabled(true)
         } catch (_: Exception) {
             false
         }
-        if (!enabled) return false
+        val directEnabled = try {
+            com.bitchat.android.ui.debug.DebugPreferenceManager.getWifiDirectEnabled(true)
+        } catch (_: Exception) {
+            false
+        }
+        if (!awareEnabled && !directEnabled) return false
 
+        // NEARBY_WIFI_DEVICES gates both Wi-Fi Aware and Wi-Fi Direct on Android 13+.
         return try {
-            com.bitchat.android.wifiaware.WifiAwareSupport.isSupported(context)
+            com.bitchat.android.wifiaware.WifiAwareSupport.isSupported(context) ||
+                com.bitchat.android.wifidirect.WifiDirectSupport.isSupported(context)
         } catch (_: Exception) {
             false
         }
@@ -255,10 +262,10 @@ class PermissionManager(private val context: Context) {
         categories.add(
             PermissionCategory(
                 type = PermissionType.NEARBY_DEVICES,
-                description = "Required to discover bitchat users via Bluetooth",
+                description = "Required to discover Dead Air users via Bluetooth",
                 permissions = bluetoothPermissions,
                 isGranted = bluetoothPermissions.all { isPermissionGranted(it) },
-                systemDescription = "Allow bitchat to connect to nearby devices"
+                systemDescription = "Allow Dead Air to connect to nearby devices"
             )
         )
 
@@ -271,10 +278,10 @@ class PermissionManager(private val context: Context) {
         categories.add(
             PermissionCategory(
                 type = PermissionType.PRECISE_LOCATION,
-                description = "Required by Android to discover nearby bitchat users via Bluetooth",
+                description = "Required by Android to discover nearby Dead Air users via Bluetooth",
                 permissions = locationPermissions,
                 isGranted = locationPermissions.all { isPermissionGranted(it) },
-                systemDescription = "bitchat needs this to scan for nearby devices"
+                systemDescription = "Dead Air needs this to scan for nearby devices"
             )
         )
 
@@ -284,10 +291,10 @@ class PermissionManager(private val context: Context) {
             categories.add(
                 PermissionCategory(
                     type = PermissionType.WIFI_AWARE,
-                    description = "Enable Wi‑Fi Aware to discover and connect to nearby bitchat users over Wi‑Fi.",
+                    description = "Enable Wi‑Fi Aware to discover and connect to nearby Dead Air users over Wi‑Fi.",
                     permissions = wifiAwarePermissions,
                     isGranted = wifiAwarePermissions.all { isPermissionGranted(it) },
-                    systemDescription = "Allow bitchat to discover nearby Wi‑Fi devices"
+                    systemDescription = "Allow Dead Air to discover nearby Wi‑Fi devices"
                 )
             )
         }
@@ -313,7 +320,7 @@ class PermissionManager(private val context: Context) {
                     description = "Receive notifications when you receive private messages",
                     permissions = listOf(Manifest.permission.POST_NOTIFICATIONS),
                     isGranted = isPermissionGranted(Manifest.permission.POST_NOTIFICATIONS),
-                    systemDescription = "Allow bitchat to send you notifications"
+                    systemDescription = "Allow Dead Air to send you notifications"
                 )
             )
         }
@@ -325,10 +332,10 @@ class PermissionManager(private val context: Context) {
             categories.add(
                 PermissionCategory(
                     type = PermissionType.BATTERY_OPTIMIZATION,
-                    description = "Disable battery optimization to ensure bitchat runs reliably in the background and maintains mesh network connections",
+                    description = "Disable battery optimization to ensure Dead Air runs reliably in the background and maintains mesh network connections",
                     permissions = listOf("BATTERY_OPTIMIZATION"), // Custom identifier
                     isGranted = isBatteryOptimizationDisabled(),
-                    systemDescription = "Allow bitchat to run without battery restrictions"
+                    systemDescription = "Allow Dead Air to run without battery restrictions"
                 )
             )
         }

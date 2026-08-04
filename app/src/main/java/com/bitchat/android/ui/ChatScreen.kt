@@ -84,7 +84,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
     val eventPulseSelectedChannel by viewModel.selectedEventChannel.collectAsStateWithLifecycle()
     val eventPulseVenueDensity by viewModel.venueDensity.collectAsStateWithLifecycle()
     val eventPulseChannelUnreads by viewModel.channelTabUnreadCounts.collectAsStateWithLifecycle()
-    val eventPulseSOSAlert by viewModel.activeSOSAlert.collectAsStateWithLifecycle()
     val privateChatSheetPeer by viewModel.privateChatSheetPeer.collectAsStateWithLifecycle()
     val showVerificationSheet by viewModel.showVerificationSheet.collectAsStateWithLifecycle()
     val showSecurityVerificationSheet by viewModel.showSecurityVerificationSheet.collectAsStateWithLifecycle()
@@ -407,9 +406,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
         onSendFileNote = { peer, onionOrChannel, path ->
             viewModel.sendFileNote(peer, onionOrChannel, path)
         },
-        onPhotoCaptured = { path -> viewModel.sendCapturedPhoto(path) },
-        onVoiceNoteReady = { path -> viewModel.sendCapturedVoice(path) },
-        
+
         showCommandSuggestions = showCommandSuggestions,
         commandSuggestions = commandSuggestions,
         showMentionSuggestions = showMentionSuggestions,
@@ -438,18 +435,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
           }
         }
 
-        // ── SOS Alert Banner ───────────────────────────────────────────────
-        eventPulseSOSAlert?.let { alert ->
-            SOSAlertBanner(
-                alert = alert,
-                onDismiss = { viewModel.dismissSOSAlert() },
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = statusBarHeight + headerHeight)
-                    .zIndex(2f)
-            )
-        }
-
         // ── EventPulse Channel Tabs ────────────────────────────────────────
         Box(
             modifier = Modifier
@@ -466,18 +451,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
                     currentCounts[channel] = 0
                 },
                 unreadCounts = eventPulseChannelUnreads
-            )
-        }
-
-        // ── SOS Action Button ──────────────────────────────────────────────
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 16.dp, bottom = composerHeight + 72.dp)
-                .zIndex(2f)
-        ) {
-            SOSActionButton(
-                onSOS = { viewModel.sendSOS() }
             )
         }
 
@@ -665,8 +638,6 @@ fun ChatInputSection(
     onSendVoiceNote: (String?, String?, String) -> Unit,
     onSendImageNote: (String?, String?, String) -> Unit,
     onSendFileNote: (String?, String?, String) -> Unit,
-    onPhotoCaptured: (String) -> Unit,
-    onVoiceNoteReady: (String) -> Unit,
     showCommandSuggestions: Boolean,
     commandSuggestions: List<CommandSuggestion>,
     showMentionSuggestions: Boolean,
@@ -745,16 +716,6 @@ fun ChatInputSection(
                 HorizontalDivider(thickness = 1.dp, color = colorScheme.outlineVariant)
             }
         }
-        // EventPulse quick capture row: one-tap camera + voice note above the composer
-        if (showMediaButtons) {
-            EventPulseMediaCaptureRow(
-                onPhotoCaptured = onPhotoCaptured,
-                onVoiceNoteReady = onVoiceNoteReady,
-                modifier = Modifier.fillMaxWidth()
-            )
-            HorizontalDivider(thickness = 1.dp, color = colorScheme.outlineVariant)
-        }
-
         MessageInput(
             value = messageText,
             onValueChange = onMessageTextChange,

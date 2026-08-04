@@ -33,7 +33,7 @@ class UniversalApkManager(private val context: Context) {
         private const val CACHE_DIR_NAME = "universal_apk"
         private const val METADATA_FILE_NAME = "universal_apk_info.json"
         private const val PROGRESS_FILE_NAME = "download_progress.json"
-        private const val APK_FILE_PREFIX = "bitchat-universal-"
+        private const val APK_FILE_PREFIX = "eventpulse-universal-"
 
         // Download buffer size (128KB)
         private const val BUFFER_SIZE = 128 * 1024
@@ -264,7 +264,7 @@ class UniversalApkManager(private val context: Context) {
             } else {
                 val requestBuilder = Request.Builder()
                     .url(url)
-                    .addHeader("User-Agent", "BitChat-Android")
+                    .addHeader("User-Agent", "DeadAir-Android")
 
                 if (existingBytes > 0) {
                     requestBuilder.addHeader("Range", "bytes=$existingBytes-")

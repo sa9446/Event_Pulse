@@ -489,7 +489,9 @@ class ChatUIUtilsTest {
 
     @Test
     fun `material owns standard text while Bitchat palette owns peer chroma`() {
-        assertEquals(Color(0xFFF5F5F5), DarkBitchatColorScheme.onSurface)
+        // Near-white body text on the charcoal-navy surface, not pure white: keeps contrast
+        // while staying softer than the old pure-black terminal read.
+        assertEquals(Color(0xFFE8EAF2), DarkBitchatColorScheme.onSurface)
         assertTrue(LightBitchatColorScheme.onSurface != DarkBitchatColorScheme.onSurface)
         assertTrue(
             LightBitchatPalette.peerColors != DarkBitchatPalette.peerColors

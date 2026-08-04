@@ -87,6 +87,9 @@ class FragmentingPacketSender(
 
                 if (!delivered) {
                     Log.w(logTag, "Stopping fragmented send for $description after $sent/$total fragments")
+                    // Surface the failure so the UI marks the message as failed instead of
+                    // leaving a forever-"sending" bubble (which reads as "only metadata sent").
+                    if (transferId != null) TransferProgressManager.fail(transferId)
                     return@launch
                 }
 

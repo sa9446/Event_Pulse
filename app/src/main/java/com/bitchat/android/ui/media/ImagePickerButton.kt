@@ -91,20 +91,21 @@ fun ImagePickerButton(
     val isPressed by interactionSource.collectIsPressedAsState()
 
     // Shares the composer's button treatment so camera, microphone and send read as one set.
+    // Click: take in-app camera photo. Long-click: pick from gallery.
     ComposerActionSurface(
         isActive = false,
         isPressed = isPressed,
         modifier = modifier.combinedClickable(
             interactionSource = interactionSource,
             indication = null,
-            onClick = { imagePicker.launch("image/*") },
-            onLongClick = {
+            onClick = {
                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                     startCameraCapture()
                 } else {
                     permissionLauncher.launch(Manifest.permission.CAMERA)
                 }
-            }
+            },
+            onLongClick = { imagePicker.launch("image/*") }
         )
     ) { tint ->
         Icon(

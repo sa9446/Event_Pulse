@@ -260,6 +260,7 @@ fun ForceDirectedMeshGraph(
     wifiAwarePeerIDs: Set<String> = emptySet(),
     blePeerIDs: Set<String> = emptySet(),
     localPeerID: String? = null,
+    activeRoutes: List<List<String>> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -391,7 +392,39 @@ fun ForceDirectedMeshGraph(
                 }
             }
             
-            // Draw Active Routes (overlay)
+            // Draw persistent computed routes (dim gold): the live multi-hop paths from this
+            // device to every reachable peer, computed by RoutePlanner from gossip. The
+            // first-hop segment (this device -> next hop) is drawn bright/solid; the rest of
+            // the path is dashed so next-hops are immediately legible.
+            val routesFromLocal = activeRoutes.filter { route ->
+                localPeerID != null && route.firstOrNull() == localPeerID
+            }
+            routesFromLocal.forEach { route ->
+                for (i in 0 until route.size - 1) {
+                    val p1 = nodeMap[route[i]]
+                    val p2 = nodeMap[route[i + 1]]
+                    if (p1 != null && p2 != null) {
+                        val isFirstHopSegment = i == 0
+                        drawLine(
+                            color = if (isFirstHopSegment) Color(0xFFFFD700).copy(alpha = 0.75f)
+                            else Color(0xFFFFD700).copy(alpha = 0.22f),
+                            start = Offset(p1.x, p1.y),
+                            end = Offset(p2.x, p2.y),
+                            strokeWidth = if (isFirstHopSegment) 4f else 2.5f,
+                            pathEffect = if (isFirstHopSegment) null
+                            else PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f),
+                            cap = androidx.compose.ui.graphics.StrokeCap.Round
+                        )
+                    }
+                }
+            }
+
+            // Next-hop badges: gold rings on the direct neighbors this device routes through.
+            val nextHops = routesFromLocal.mapNotNull { route ->
+                if (route.size >= 2) route[1] else null
+            }.toSet()
+
+            // Draw Active Routes (transient animation from live packet activity)
             simulation.activeRoutes.forEach { (route, intensity) ->
                 val routeColor = Color(0xFFFFD700).copy(alpha = intensity) // Gold
                 val strokeW = 4f * intensity + 2f
@@ -443,6 +476,16 @@ fun ForceDirectedMeshGraph(
                     center = center,
                     style = Stroke(width = 2f)
                 )
+
+                // Next-hop ring for direct neighbors on an active source route
+                if (node.id in nextHops) {
+                    drawCircle(
+                        color = Color(0xFFFFD700).copy(alpha = 0.85f),
+                        radius = 21f,
+                        center = center,
+                        style = Stroke(width = 2.5f)
+                    )
+                }
                 
                 // Label
                 drawContext.canvas.nativeCanvas.drawText(

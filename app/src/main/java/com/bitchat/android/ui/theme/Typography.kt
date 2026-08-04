@@ -18,7 +18,7 @@ val MessageBodyTextStyle = ChatVisualTokens.MessageBodyStyle
 /** Sender label above a message group. Single line, never wraps. */
 val MessageSenderTextStyle = ChatVisualTokens.SenderStyle
 
-// Typography matching the iOS monospace design - using BASE_FONT_SIZE for consistency
+// Typography built on the Plus Jakarta Sans family - using BASE_FONT_SIZE for consistency
 val Typography = Typography(
     bodyLarge = TextStyle(
         fontFamily = BitchatFontFamily,

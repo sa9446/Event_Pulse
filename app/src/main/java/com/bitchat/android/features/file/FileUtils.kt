@@ -190,6 +190,16 @@ object FileUtils {
     }
 
     /**
+     * Check if a file is a video file by extension or MIME type
+     */
+    fun isVideoFile(fileName: String, mimeType: String? = null): Boolean {
+        val lowerMime = mimeType?.lowercase() ?: ""
+        if (lowerMime.startsWith("video/")) return true
+        val ext = fileName.substringAfterLast(".", "").lowercase()
+        return ext in listOf("mp4", "avi", "mov", "mkv", "webm", "3gp", "flv", "wmv", "m4v")
+    }
+
+    /**
      * Save an incoming file packet to app storage and return absolute path.
      * Mirrors existing behavior used in MessageHandler (preserves names and folders).
      */
@@ -199,10 +209,15 @@ object FileUtils {
     ): String {
         val lowerMime = file.mimeType.lowercase()
         val isImage = lowerMime.startsWith("image/")
+        val isAudio = lowerMime.startsWith("audio/")
         // FIX: Use cacheDir instead of filesDir to prevent storage exhaustion attacks (Issue #592)
         // Files in cacheDir are eligible for automatic system cleanup when space is low
         val baseDir = context.cacheDir
-        val subdir = if (isImage) "images/incoming" else "files/incoming"
+        val subdir = when {
+            isImage -> "images/incoming"
+            isAudio -> "voicenotes/incoming"
+            else -> "files/incoming"
+        }
         val dir = java.io.File(baseDir, subdir).apply { mkdirs() }
 
         fun extFromMime(m: String): String = when (m.lowercase()) {
@@ -211,12 +226,20 @@ object FileUtils {
             "image/webp" -> ".webp"
             "application/pdf" -> ".pdf"
             "text/plain" -> ".txt"
-            else -> if (isImage) ".jpg" else ".bin"
+            "audio/mp4", "audio/m4a" -> ".m4a"
+            "audio/aac" -> ".aac"
+            "audio/mpeg", "audio/mp3" -> ".mp3"
+            "audio/wav" -> ".wav"
+            else -> when {
+                isImage -> ".jpg"
+                isAudio -> ".m4a"
+                else -> ".bin"
+            }
         }
 
         // Prefer transmitted original name; ensure uniqueness to avoid overwrites
         val baseName = (file.fileName.takeIf { it.isNotBlank() }
-            ?: (if (isImage) "img" else "file"))
+            ?: (if (isImage) "img" else if (isAudio) "voice" else "file"))
             .replace(Regex("[^A-Za-z0-9._-]"), "_")
         val ext = extFromMime(lowerMime)
         var safeName = if (baseName.contains('.')) baseName else baseName + ext
@@ -257,7 +280,9 @@ object FileUtils {
                 out.outputStream().use { it.write(file.content) }
                 out.absolutePath
             } catch (_: Exception) {
-                val tmp = java.io.File.createTempFile(if (isImage) "img_" else "file_", if (isImage) ".jpg" else ".bin")
+                val prefix = if (isImage) "img_" else if (isAudio) "voice_" else "file_"
+                val fallbackExt = if (isImage) ".jpg" else if (isAudio) ".m4a" else ".bin"
+                val tmp = java.io.File.createTempFile(prefix, fallbackExt)
                 tmp.writeBytes(file.content)
                 tmp.absolutePath
             }

@@ -51,6 +51,9 @@ class DebugSettingsManager private constructor() {
     private val _wifiAwareVerbose = MutableStateFlow(false)
     val wifiAwareVerbose: StateFlow<Boolean> = _wifiAwareVerbose.asStateFlow()
 
+    private val _wifiDirectEnabled = MutableStateFlow(true)
+    val wifiDirectEnabled: StateFlow<Boolean> = _wifiDirectEnabled.asStateFlow()
+
     // Visibility of the debug sheet; gates heavy work
     private val _debugSheetVisible = MutableStateFlow(false)
     val debugSheetVisible: StateFlow<Boolean> = _debugSheetVisible.asStateFlow()
@@ -76,8 +79,9 @@ class DebugSettingsManager private constructor() {
             _maxClientConnections.value = DebugPreferenceManager.getMaxConnectionsClient(8)
             // Transport toggles
             _bleEnabled.value = DebugPreferenceManager.getBleEnabled(true)
-            _wifiAwareEnabled.value = DebugPreferenceManager.getWifiAwareEnabled(false)
+            _wifiAwareEnabled.value = DebugPreferenceManager.getWifiAwareEnabled(true)
             _wifiAwareVerbose.value = DebugPreferenceManager.getWifiAwareVerbose(false)
+            _wifiDirectEnabled.value = DebugPreferenceManager.getWifiDirectEnabled(true)
         } catch (_: Exception) {
             // Preferences not ready yet; keep defaults. They will be applied on first change.
         }
@@ -296,6 +300,15 @@ class DebugSettingsManager private constructor() {
         addDebugMessage(DebugMessage.SystemMessage(if (enabled) "🟢 Wi‑Fi Aware enabled" else "🔴 Wi‑Fi Aware disabled"))
         try {
             com.bitchat.android.wifiaware.WifiAwareController.setEnabled(enabled)
+        } catch (_: Exception) { }
+    }
+
+    fun setWifiDirectEnabled(enabled: Boolean) {
+        DebugPreferenceManager.setWifiDirectEnabled(enabled)
+        _wifiDirectEnabled.value = enabled
+        addDebugMessage(DebugMessage.SystemMessage(if (enabled) "🟢 Wi‑Fi Direct enabled" else "🔴 Wi‑Fi Direct disabled"))
+        try {
+            com.bitchat.android.wifidirect.WifiDirectController.setEnabled(enabled)
         } catch (_: Exception) { }
     }
 

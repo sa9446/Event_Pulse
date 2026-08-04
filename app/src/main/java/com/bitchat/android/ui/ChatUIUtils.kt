@@ -44,12 +44,13 @@ internal val MENTION_TOKEN_REGEX = Regex("@([\\p{L}0-9_]+(?:#[a-fA-F0-9]{4})?)")
  * Get RSSI-based color for signal strength visualization
  */
 fun getRSSIColor(rssi: Int): Color {
+    // Signal-strength ramp in the app's teal/amber/error family rather than terminal neon.
     return when {
-        rssi >= -50 -> Color(0xFF00FF00) // Bright green
-        rssi >= -60 -> Color(0xFF80FF00) // Green-yellow
-        rssi >= -70 -> Color(0xFFFFFF00) // Yellow
-        rssi >= -80 -> Color(0xFFFF8000) // Orange
-        else -> Color(0xFFFF4444) // Red
+        rssi >= -50 -> Color(0xFF4DD6C3) // Excellent - app teal
+        rssi >= -60 -> Color(0xFF8FCE6E) // Very good - fresh green
+        rssi >= -70 -> Color(0xFFFFC857) // Good - warm amber
+        rssi >= -80 -> Color(0xFFFF9F43) // Fair - orange
+        else -> Color(0xFFFF5D6C) // Poor - app error red
     }
 }
 

@@ -1,6 +1,6 @@
-# Google Play App Signing — EventPulse
+# Google Play App Signing — Dead Air
 
-This guide explains how EventPulse's signing setup maps to **Google Play App Signing**,
+This guide explains how Dead Air's signing setup maps to **Google Play App Signing**,
 and exactly how to prepare, upload, and verify a production build on the Play Store.
 
 ## The four signing identities (don't mix them up)
@@ -58,7 +58,7 @@ keytool -genkeypair -v \
   -keystore /secure/path/to/play-upload.jks \
   -alias eventpulse-upload \
   -keyalg RSA -keysize 2048 -validity 10000 \
-  -dname "CN=EventPulse Upload, OU=EventPulse, O=EventPulse, L=Chennai, ST=TN, C=IN"
+  -dname "CN=Dead Air Upload, OU=Dead Air, O=Dead Air, L=Chennai, ST=TN, C=IN"
 ```
 
 Store `play-upload.jks` + its passwords in a password manager. Never commit it.

@@ -49,26 +49,26 @@ data class BitchatPalette(
 )
 
 val DarkBitchatPalette = BitchatPalette(
-    inputOutline = Color(0xFF333635),
-    inputOutlineFocused = Color(0xFF5A605D),
-    inputSurface = Color(0xFF0B0B0B),
-    inputSurfaceFocused = Color(0xFF151515),
-    inputButton = Color(0xFF1E1E1E),
-    textTertiary = Color(0xFF6B776B),
-    accentOrange = Color(0xFFFF9F0A),
-    accentPurple = Color(0xFFBF5AF2),
+    inputOutline = Color(0xFF3A4158),
+    inputOutlineFocused = Color(0xFF8B7CFF),
+    inputSurface = Color(0xFF10141F),
+    inputSurfaceFocused = Color(0xFF191E2E),
+    inputButton = Color(0xFF232940),
+    textTertiary = Color(0xFF8A91A8),
+    accentOrange = Color(0xFFFFB454),
+    accentPurple = Color(0xFFC48FFF),
     peerColors = PeerColorStyle.Dark,
 )
 
 val LightBitchatPalette = BitchatPalette(
-    inputOutline = Color(0xFFCFD3D1),
-    inputOutlineFocused = Color(0xFF8E9490),
-    inputSurface = Color(0xFFFAFAFA),
-    inputSurfaceFocused = Color(0xFFF2F2F2),
-    inputButton = Color(0xFFE8E8E8),
-    textTertiary = Color(0xFF757F75),
+    inputOutline = Color(0xFFC3C9D8),
+    inputOutlineFocused = Color(0xFF5B4BD9),
+    inputSurface = Color(0xFFFFFFFF),
+    inputSurfaceFocused = Color(0xFFF1F3FA),
+    inputButton = Color(0xFFE8EBF4),
+    textTertiary = Color(0xFF6E7590),
     accentOrange = Color(0xFFFF9500),
-    accentPurple = Color(0xFFAF52DE),
+    accentPurple = Color(0xFF9B6CE8),
     peerColors = PeerColorStyle.Light,
 )
 

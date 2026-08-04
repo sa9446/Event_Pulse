@@ -365,6 +365,54 @@ def setup_pair(
     wait_for_mutual_discovery(a, b)
 
 
+def setup_three(
+    a: Device,
+    b: Device,
+    c: Device,
+    apk_a: Path | None,
+    nickname_a: str,
+    nickname_b: str,
+    nickname_c: str,
+    apk_b: Path | None = None,
+    apk_c: Path | None = None,
+) -> None:
+    """Provision three phones in a line (A-B-C) for multi-hop relay testing.
+
+    Each device is provisioned exactly once, then the two direct hops around the
+    hub are confirmed: A<->B and B<->C. A and C are expected to be physically out
+    of range of each other; they only become aware of one another through B's
+    relayed announcements. No A<->C direct link is established or asserted here.
+    """
+    if apk_b is None:
+        apk_b = apk_a
+    if apk_c is None:
+        apk_c = apk_a
+    for device, nickname, apk in (
+        (a, nickname_a, apk_a),
+        (b, nickname_b, apk_b),
+        (c, nickname_c, apk_c),
+    ):
+        device.reset_bluetooth()
+        device.enable_bluetooth()
+        if apk is not None:
+            device.install(apk)
+        device.clear_app_data()
+        device.grant_permissions()
+        device.wake()
+        device.launch()
+        device.cmd_ok("start")
+        device.cmd_ok("set_nickname", name=nickname)
+    wait_for_mutual_discovery(a, b)
+    wait_for_mutual_discovery(b, c)
+    # Push relayed announcements so A and C learn about each other through B.
+    try:
+        a.cmd_ok("announce")
+        c.cmd_ok("announce")
+        time.sleep(5)
+    except MeshLabError:
+        pass  # the multi_hop scenario asserts delivery, which is the real contract
+
+
 def whoami(device: Device) -> dict:
     return device.cmd_ok("whoami")
 
@@ -591,6 +639,66 @@ def scenario_raw(a: Device, b: Device) -> dict:
     return {"send": result}
 
 
+def scenario_multi_hop(a: Device, b: Device, c: Device) -> dict:
+    """A -> B -> C relay: A's DM to C must arrive through hub B.
+
+    Layout: A and C are out of each other's range; B sits between them. The
+    contract is that the Noise handshake and the encrypted DM travel A->B->C
+    hop-by-hop via the shared mesh graph (source route through B) rather than a
+    direct A-C link. This exercises the multi-hop routing added for cross-
+    transport A->B->C delivery.
+    """
+    id_a = whoami(a)["peer_id"]
+    id_b = whoami(b)["peer_id"]
+    id_c = whoami(c)["peer_id"]
+
+    # Establish the two direct hops around the hub.
+    ensure_direct_link(a, b, id_a, id_b)
+    ensure_direct_link(b, c, id_b, id_c)
+
+    # End-to-end Noise handshake A<->C rides the source route through B.
+    force_handshake(a, id_c)
+    force_handshake(c, id_a)
+
+    # Sanity: A must NOT hold a direct link to C, or this is not multi-hop.
+    a_peers = a.cmd_ok("peers").get("peers", [])
+    a_c = next((p for p in a_peers if p.get("id") == id_c), None)
+    if a_c is not None and a_c.get("direct"):
+        raise MeshLabError("A has a direct link to C; multi-hop contract not exercised")
+
+    token = f"mh-{uuid.uuid4().hex[:8]}"
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        recv = pool.submit(c.cmd_ok, "dm_recv", 90_000, peer=id_a, contains=token)
+        time.sleep(2)
+        send = pool.submit(a.cmd_ok, "dm_send", 60_000, peer=id_c, content=f"via b {token}")
+        recv_result, send_result = recv.result(), send.result()
+    if token not in recv_result.get("content", ""):
+        raise MeshLabError(f"C did not receive A's DM through B: {recv_result}")
+    # Assert sender identity only when the hook reports it (dm_recv may omit the
+    # field); an absent field must not turn a delivered DM into a failure.
+    recv_from = recv_result.get("from")
+    if recv_from is not None and recv_from != id_a:
+        raise MeshLabError(f"C received the DM from the wrong sender: {recv_result}")
+
+    # Prove B actually relayed: its live route metrics must show unicast relays or
+    # fallback floods from forwarding A's packet toward C. Delivery alone could
+    # conceivably come from a hidden A-C path; B's counters close that loophole.
+    relay_a = a.cmd_ok("route_metrics")
+    relay_b = b.cmd_ok("route_metrics")
+    relay_c = c.cmd_ok("route_metrics")
+    b_relays = sum(relay_b.get("relay_success", {}).values()) + sum(relay_b.get("relay_failure", {}).values())
+    b_floods = relay_b.get("fallback_floods", 0)
+    if b_relays == 0 and b_floods == 0:
+        raise MeshLabError(
+            f"hub B shows no relay activity; DM was not forwarded through B: {relay_b}"
+        )
+    return {
+        "topology": {"a": id_a, "hub_b": id_b, "c": id_c},
+        "a_to_c": {"send": send_result, "recv": recv_result},
+        "route_metrics": {"a": relay_a, "b": relay_b, "c": relay_c},
+    }
+
+
 # MARK: - session / identity churn scenarios
 
 def _dm_roundtrip(a: Device, b: Device, id_a: str, id_b: str) -> dict:
@@ -815,22 +923,34 @@ WATCH_SCENARIOS = [
 ]
 
 
-def run_scenario(name: str, a: Device, b: Device, out: Path | None) -> dict:
+def run_scenario(name: str, a: Device, b: Device, out: Path | None, c: Device | None = None) -> dict:
     started = time.time()
-    evidence: dict[str, object] = {"scenario": name, "devices": [a.alias, b.alias]}
+    devices = (a, b) if c is None else (a, b, c)
+    evidence: dict[str, object] = {"scenario": name, "devices": [d.alias for d in devices]}
     try:
         supported = WATCH_SCENARIOS if isinstance(b, WatchDevice) else list(SCENARIOS)
         if name == "all":
             results = {}
             failures = []
             for n in supported:
-                sub = run_scenario(n, a, b, out)
+                sub = run_scenario(n, a, b, out, c=c)
                 results[n] = sub.get("results", {"error": sub.get("error", "unknown")})
                 if sub["status"] != "pass":
                     failures.append(n)
+            if c is not None:
+                sub = run_scenario("multi_hop", a, b, out, c=c)
+                results["multi_hop"] = sub.get("results", {"error": sub.get("error", "unknown")})
+                if sub["status"] != "pass":
+                    failures.append("multi_hop")
             evidence["results"] = results
             if failures:
                 raise MeshLabError(f"sub-scenarios failed: {', '.join(failures)}")
+        elif name == "multi_hop":
+            if c is None:
+                raise MeshLabError("scenario 'multi_hop' requires --serial-c (three phones)")
+            if isinstance(b, WatchDevice) or isinstance(c, WatchDevice):
+                raise MeshLabError("scenario 'multi_hop' requires three phones (no watches)")
+            evidence["results"] = scenario_multi_hop(a, b, c)
         elif name not in supported:
             raise MeshLabError(f"scenario '{name}' is not supported on device '{b.alias}'")
         else:
@@ -839,7 +959,7 @@ def run_scenario(name: str, a: Device, b: Device, out: Path | None) -> dict:
     except (MeshLabError, AssertionError) as error:
         evidence["status"] = "fail"
         evidence["error"] = str(error)
-        evidence["logcat"] = {d.alias: d.logcat_dump() for d in (a, b)}
+        evidence["logcat"] = {d.alias: d.logcat_dump() for d in devices}
     evidence["duration_s"] = round(time.time() - started, 1)
     if out is not None:
         out.mkdir(parents=True, exist_ok=True)
@@ -853,20 +973,30 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest="command", required=True)
 
-    setup = commands.add_parser("setup", help="install, grant, launch, nickname, discover")
+    setup = commands.add_parser(
+        "setup", help="install, grant, launch, nickname, discover (three phones with --serial-c)"
+    )
     setup.add_argument("--serial-a", required=True)
     setup.add_argument("--serial-b")
     setup.add_argument("--serial-watch", help="watch serial; used as device B (overrides --serial-b)")
+    setup.add_argument("--serial-c", help="optional third phone for multi-hop (A-B-C) relay testing")
     setup.add_argument("--apk", type=Path, default=None)
     setup.add_argument("--watch-apk", type=Path, default=None)
     setup.add_argument("--nickname-a", default="alice")
     setup.add_argument("--nickname-b", default="bob")
+    setup.add_argument("--nickname-c", default="carol")
 
-    scenario = commands.add_parser("scenario", help="run a test scenario on two devices")
-    scenario.add_argument("name", choices=[*SCENARIOS.keys(), "all"])
+    scenario = commands.add_parser(
+        "scenario", help="run a test scenario on two devices (or three with --serial-c)"
+    )
+    scenario.add_argument("name", choices=[*SCENARIOS.keys(), "multi_hop", "all"])
     scenario.add_argument("--serial-a", required=True)
     scenario.add_argument("--serial-b")
     scenario.add_argument("--serial-watch", help="watch serial; used as device B (overrides --serial-b)")
+    scenario.add_argument(
+        "--serial-c",
+        help="optional third phone for multi-hop (A-B-C) relay scenarios",
+    )
     scenario.add_argument("--out", type=Path, default=None, help="evidence output directory")
 
     raw = commands.add_parser("cmd", help="send a raw test-hook command to one device")
@@ -894,14 +1024,25 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "setup":
             a, b = _resolve_devices(args)
             nickname_b = "watch" if isinstance(b, WatchDevice) and args.nickname_b == "bob" else args.nickname_b
-            setup_pair(
-                a, b, args.apk, args.nickname_a, nickname_b,
-                apk_b=args.watch_apk if isinstance(b, WatchDevice) else None,
-            )
+            c_serial = getattr(args, "serial_c", None)
+            if c_serial is not None:
+                if isinstance(b, WatchDevice):
+                    raise MeshLabError("--serial-c requires three phones; --serial-watch cannot be combined")
+                c = Device(c_serial, "gamma")
+                setup_three(a, b, c, args.apk, args.nickname_a, nickname_b, args.nickname_c)
+            else:
+                setup_pair(
+                    a, b, args.apk, args.nickname_a, nickname_b,
+                    apk_b=args.watch_apk if isinstance(b, WatchDevice) else None,
+                )
             print(json.dumps({"status": "ok", "step": "setup"}))
         elif args.command == "scenario":
             a, b = _resolve_devices(args)
-            evidence = run_scenario(args.name, a, b, args.out)
+            c = None
+            c_serial = getattr(args, "serial_c", None)
+            if c_serial is not None:
+                c = Device(c_serial, "gamma")
+            evidence = run_scenario(args.name, a, b, args.out, c=c)
             print(json.dumps(evidence, indent=2, default=str))
             return 0 if evidence["status"] == "pass" else 1
         elif args.command == "cmd":

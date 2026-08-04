@@ -193,10 +193,10 @@ private fun buildStatusInfo(
         else -> Icons.Outlined.NoEncryption
     }
     val tint = when {
-        isVerified -> Color(0xFF32D74B)
-        sessionState == "failed" -> Color(0xFFFF3B30)
+        isVerified -> accent
+        sessionState == "failed" -> MaterialTheme.colorScheme.error
         sessionState == "handshaking" -> Color(0xFFFF9500)
-        sessionState == "established" -> Color(0xFF32D74B)
+        sessionState == "established" -> accent
         else -> accent.copy(alpha = 0.6f)
     }
     return SecurityStatusInfo(text, icon, tint)
@@ -258,7 +258,7 @@ private fun SecurityVerificationActions(
             onClick = onStartHandshake,
             colors = ButtonDefaults.buttonColors(
                 containerColor = accent,
-                contentColor = Color.White
+                contentColor = MaterialTheme.colorScheme.onPrimary
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -273,9 +273,9 @@ private fun SecurityVerificationActions(
     if (isVerified) {
         VerificationStatusRow(
             icon = Icons.Filled.Verified,
-            iconTint = Color(0xFF32D74B),
+            iconTint = accent,
             text = stringResource(R.string.fingerprint_verified_label),
-            textTint = Color(0xFF32D74B)
+            textTint = accent
         )
         Text(
             text = stringResource(R.string.fingerprint_verified_message),
@@ -289,8 +289,8 @@ private fun SecurityVerificationActions(
         Button(
             onClick = { fingerprint?.let(onUnverify) },
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFFFF3B30),
-                contentColor = Color.White
+                containerColor = MaterialTheme.colorScheme.error,
+                contentColor = MaterialTheme.colorScheme.onError
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -320,8 +320,8 @@ private fun SecurityVerificationActions(
             Button(
                 onClick = { onVerify(fingerprint) },
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF34C759),
-                    contentColor = Color.White
+                    containerColor = accent,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {

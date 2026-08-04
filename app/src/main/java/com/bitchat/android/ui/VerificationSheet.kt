@@ -101,6 +101,7 @@ fun VerificationSheet(
     val accent = MaterialTheme.colorScheme.primary
     
     var selectedTab by remember { mutableStateOf(0) } // 0 = My Code, 1 = Scan
+    var scanFeedback by remember { mutableStateOf<ScanFeedback?>(null) }
     val nickname by viewModel.nickname.collectAsStateWithLifecycle()
     val npub = remember { viewModel.getCurrentNpub() }
 
@@ -177,10 +178,16 @@ fun VerificationSheet(
                     )
                     1 -> ScanTabContent(
                         accent = accent,
+                        feedback = scanFeedback,
                         onScan = { code ->
                             val qr = VerificationService.verifyScannedQR(code)
-                            if (qr != null && viewModel.beginQRVerification(qr)) {
-                                selectedTab = 0
+                            scanFeedback = when {
+                                qr == null -> ScanFeedback.Invalid
+                                !viewModel.beginQRVerification(qr) -> ScanFeedback.PeerNotFound
+                                else -> {
+                                    selectedTab = 0
+                                    ScanFeedback.Success
+                                }
                             }
                         }
                     )
@@ -314,10 +321,17 @@ private fun MyQrTabContent(
     }
 }
 
+private enum class ScanFeedback(val messageRes: Int, val isError: Boolean) {
+    Invalid(R.string.verify_scan_invalid, true),
+    PeerNotFound(R.string.verify_scan_peer_not_found, true),
+    Success(R.string.verify_scanned, false)
+}
+
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 private fun ScanTabContent(
     accent: Color,
+    feedback: ScanFeedback?,
     onScan: (String) -> Unit
 ) {
     val permissionState = rememberPermissionState(android.Manifest.permission.CAMERA)
@@ -401,6 +415,28 @@ private fun ScanTabContent(
                     )
                 }
             }
+        }
+
+        // Scan result feedback shown below the scanner / camera request
+        feedback?.let { fb ->
+            Text(
+                text = stringResource(fb.messageRes),
+                fontFamily = BitchatFontFamily,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+                color = if (fb.isError) MaterialTheme.colorScheme.error else accent,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        if (fb.isError) {
+                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f)
+                        } else {
+                            accent.copy(alpha = 0.15f)
+                        },
+                        RoundedCornerShape(8.dp)
+                    )
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            )
         }
     }
 }

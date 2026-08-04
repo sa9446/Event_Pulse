@@ -511,7 +511,7 @@ fun PermissionRequestScreen(onGranted: () -> Unit) {
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "bitchat",
+            text = "Dead Air",
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary

@@ -189,9 +189,9 @@ class BluetoothMeshService(private val context: Context) : TransportBridgeServic
         return connectionManager.broadcastControlPacketAndAwaitAcceptance(packet)
     }
 
-    override fun sendToPeer(peerID: String, packet: BitchatPacket) {
-        if (!isBleTransportEnabled()) return
-        connectionManager.sendPacketToPeer(peerID, packet)
+    override fun sendToPeer(peerID: String, packet: BitchatPacket): Boolean {
+        if (!isBleTransportEnabled()) return false
+        return connectionManager.sendPacketToPeer(peerID, packet)
     }
 
     private fun broadcastRoutedPacket(routed: RoutedPacket): Boolean {
@@ -637,8 +637,11 @@ class BluetoothMeshService(private val context: Context) : TransportBridgeServic
 
             override fun sendToPeer(peerID: String, routed: RoutedPacket): Boolean {
                 val sentOverBle = connectionManager.sendToPeer(peerID, routed)
-                TransportBridgeService.sendToPeer("BLE", peerID, routed.packet)
-                return sentOverBle
+                val bridged = TransportBridgeService.sendToPeer("BLE", peerID, routed.packet)
+                // Cross-transport next hops are delivered via the bridge; report success when
+                // either the local transport OR a bridged transport accepted the write so the
+                // relay does not fall back to a wasteful network-wide flood.
+                return sentOverBle || bridged
             }
             
             override fun handleRequestSync(routed: RoutedPacket) {

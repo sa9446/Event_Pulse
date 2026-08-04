@@ -17,6 +17,7 @@ import com.bitchat.android.service.MeshForegroundService
 import com.bitchat.android.service.MeshServiceHolder
 import com.bitchat.android.service.TransportBridgeService
 import com.bitchat.android.services.AppStateStore
+import com.bitchat.android.services.meshgraph.RouteMetrics
 import com.bitchat.android.ui.DataManager
 import com.bitchat.android.ui.PrivateMediaRecipientResolver
 import com.bitchat.android.util.AppConstants
@@ -84,6 +85,7 @@ object TestHookDriver {
             "ble" -> setBle(intent.getBooleanExtra("enabled", true))
             "inject_peers" -> injectPeers(intent.getStringExtra("peers"))
             "state" -> state(context)
+            "route_metrics" -> routeMetrics()
             "clear_results" -> clearResults(context)
             else -> err(cmd, "unknown command: $cmd")
         }
@@ -549,6 +551,18 @@ object TestHookDriver {
         val dir = File(context.cacheDir, "testhook/results")
         val count = dir.listFiles()?.count { it.delete() } ?: 0
         return ok("clear_results").put("deleted", count)
+    }
+
+    private fun routeMetrics(): JSONObject {
+        val s = RouteMetrics.flush()
+        return ok("route_metrics")
+            .put("relay_success", JSONObject(s.relaySuccessByTransport))
+            .put("relay_failure", JSONObject(s.relayFailureByTransport))
+            .put("routed_drops", s.routedDrops)
+            .put("fallback_floods", s.fallbackFloods)
+            .put("path_changes", s.pathChanges)
+            .put("routes_planned", s.routesKnown)
+            .put("hop_profile", JSONObject(s.hopCountHistogram.mapKeys { it.key.toString() }))
     }
 
     // MARK: - Helpers

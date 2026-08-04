@@ -3,6 +3,7 @@ package com.bitchat.android.service
 import android.util.Log
 import com.bitchat.android.model.RoutedPacket
 import com.bitchat.android.protocol.BitchatPacket
+import com.bitchat.android.services.meshgraph.RouteMetrics
 import com.bitchat.android.util.toHexString
 import kotlinx.coroutines.CancellationException
 import java.security.MessageDigest
@@ -42,8 +43,12 @@ object TransportBridgeService {
 
         /**
          * Send a packet to a specific peer via this transport (optional).
+         *
+         * Returns true only when the peer is directly reachable on this transport and at least
+         * one concrete write was accepted. Relay next-hop forwarding across transports relies on
+         * this result to decide whether unicast succeeded (vs. falling back to a flood).
          */
-        fun sendToPeer(peerID: String, packet: BitchatPacket) { }
+        fun sendToPeer(peerID: String, packet: BitchatPacket): Boolean = false
     }
 
     private val transports = ConcurrentHashMap<String, TransportLayer>()
@@ -150,20 +155,36 @@ object TransportBridgeService {
 
     /**
      * Send a packet to a specific peer across all other transports.
+     *
+     * Returns true when at least one other transport accepted a concrete unicast write for the
+     * peer. Relays use this to know a cross-transport next hop actually went out, so they do not
+     * need to fall back to a network-wide flood.
      */
-    fun sendToPeer(sourceId: String, peerID: String, packet: BitchatPacket) {
+    fun sendToPeer(sourceId: String, peerID: String, packet: BitchatPacket): Boolean {
         val targets = transports.filterKeys { it != sourceId }
-        if (targets.isEmpty()) return
-        val forwardedPacket =
-            prepareForwardedPacket("peer:$peerID", packet)?.packet ?: return
+        if (targets.isEmpty()) return false
+        val prepared = prepareForwardedPacket("peer:$peerID", packet) ?: return false
+        val forwardedPacket = prepared.packet
 
+        var accepted = false
         targets.forEach { (id, layer) ->
-            try {
-                layer.sendToPeer(peerID, forwardedPacket)
+            val ok = try {
+                layer.sendToPeer(peerID, forwardedPacket).also { result ->
+                    RouteMetrics.recordRelay(id, result)
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to bridge unicast packet to $id: ${e.message}")
+                RouteMetrics.recordRelay(id, false)
+                false
             }
+            accepted = ok || accepted
         }
+        if (!accepted) {
+            // Failed attempts release their duplicate-suppression reservation so a later retry
+            // can use a transport that reconnects during the retry window.
+            releaseSeenPacket(prepared)
+        }
+        return accepted
     }
 
     /**
@@ -187,17 +208,19 @@ object TransportBridgeService {
     /**
      * Send a locally originated packet directly to a peer on every active transport.
      */
-    fun sendToPeerFromLocal(peerID: String, packet: BitchatPacket) {
+    fun sendToPeerFromLocal(peerID: String, packet: BitchatPacket): Boolean {
         val targets = transports.toMap()
-        if (targets.isEmpty()) return
+        if (targets.isEmpty()) return false
 
+        var accepted = false
         targets.forEach { (id, layer) ->
             try {
-                layer.sendToPeer(peerID, packet)
+                if (layer.sendToPeer(peerID, packet)) accepted = true
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to send local peer packet to $id: ${e.message}")
             }
         }
+        return accepted
     }
 
     private fun prepareForwardedPacket(kind: String, packet: BitchatPacket): PreparedForward? {

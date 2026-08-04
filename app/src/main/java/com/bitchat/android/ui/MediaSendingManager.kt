@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -45,6 +46,11 @@ class MediaSendingManager(
         private const val TAG = "MediaSendingManager"
         private const val MAX_FILE_SIZE = com.bitchat.android.util.AppConstants.Media.MAX_FILE_SIZE_BYTES
         private const val PENDING_PRIVATE_MEDIA_TIMEOUT_MS = 15_000L
+        // Route-aware retry: when the transport chosen for the first hop rejects the send, keep
+        // the first-send intent and re-run preparation a bounded number of times. The unified
+        // mesh falls back to an alternate transport on each retry (see prepareFilePrivate).
+        private const val MAX_PRIVATE_MEDIA_RETRIES = 2
+        private const val PRIVATE_MEDIA_RETRY_DELAY_MS = 2_000L
     }
 
     // Track in-flight transfer progress: transferId -> messageId and reverse
@@ -82,6 +88,10 @@ class MediaSendingManager(
     private var evaluatingAutomaticRequestId: String? = null
     private var automaticRetryRequestedFor: String? = null
     private var pendingAutomaticTimeoutRequestId: String? = null
+    // requestId -> rejected-preparation attempt counter (for the bounded route-aware retry)
+    private val rejectedRetryAttempts = mutableMapOf<String, Int>()
+    // requestId -> active timeout job (re-armed on every retry so the window slides)
+    private val pendingTimeoutJobs = mutableMapOf<String, Job>()
 
     /**
      * Enforce the send-size cap with a user-visible failure posted to the
@@ -168,6 +178,41 @@ class MediaSendingManager(
     }
 
     /**
+     * Post a user-visible "cannot send video" notice to the conversation being sent from.
+     */
+    private fun rejectVideoSend(
+        fileName: String,
+        toPeerIDOrNull: String?,
+        channelOrNull: String?
+    ) {
+        Log.e(TAG, "Video sending is not supported: $fileName")
+        val text = "cannot send $fileName: video files are not supported over the mesh"
+        when {
+            toPeerIDOrNull != null -> {
+                val sys = BitchatMessage(
+                    sender = "system",
+                    content = text,
+                    timestamp = Date(),
+                    isRelay = false,
+                    isPrivate = true,
+                    senderPeerID = toPeerIDOrNull
+                )
+                messageManager.addPrivateMessageNoUnread(toPeerIDOrNull, sys)
+            }
+            channelOrNull != null -> {
+                val sys = BitchatMessage(
+                    sender = "system",
+                    content = text,
+                    timestamp = Date(),
+                    isRelay = false
+                )
+                messageManager.addChannelMessage(channelOrNull, sys)
+            }
+            else -> messageManager.addSystemMessage(text)
+        }
+    }
+
+    /**
      * Send an image file
      */
     fun sendImageNote(toPeerIDOrNull: String?, channelOrNull: String?, filePath: String) {
@@ -242,6 +287,12 @@ class MediaSendingManager(
                     com.bitchat.android.features.file.FileUtils.getMimeTypeFromExtension(file.name)
                 } catch (_: Exception) {
                     "application/octet-stream"
+                }
+
+                // Video files are not supported over the mesh; reject with a clear message
+                if (com.bitchat.android.features.file.FileUtils.isVideoFile(file.name, mimeType)) {
+                    rejectVideoSend(file.name, toPeerIDOrNull, channelOrNull)
+                    return@withContext null
                 }
 
                 // Try to preserve the original file name if our copier prefixed it earlier
@@ -374,6 +425,9 @@ class MediaSendingManager(
             evaluatingAutomaticRequestId = null
             automaticRetryRequestedFor = null
             pendingAutomaticTimeoutRequestId = null
+            pendingTimeoutJobs.values.forEach { it.cancel() }
+            pendingTimeoutJobs.clear()
+            rejectedRetryAttempts.clear()
             _legacyPrivateMediaConsent.value = null
         }
     }
@@ -513,6 +567,36 @@ class MediaSendingManager(
             }
 
             is PrivateMediaPreparation.Rejected -> {
+                // Policy/preflight rejections are terminal and surface immediately; only
+                // transport/route failures qualify for the bounded route-aware retry.
+                if (!isTransportRetryable(preparation.reason)) {
+                    clearAutomaticPending(pending.requestId)
+                    Log.w(TAG, "Private media not sent: ${preparation.reason}")
+                    addPrivateMediaSystemMessage(
+                        pending.conversationID,
+                        "Private media was not sent: ${preparation.reason}"
+                    )
+                    return
+                }
+                val attempt = synchronized(pendingConsentLock) {
+                    val n = (rejectedRetryAttempts[pending.requestId] ?: 0) + 1
+                    rejectedRetryAttempts[pending.requestId] = n
+                    n
+                }
+                if (attempt <= MAX_PRIVATE_MEDIA_RETRIES) {
+                    // Route-aware retry: retain the first-send intent and re-run preparation
+                    // after a short delay. By then the mesh may have re-selected a working
+                    // transport (first hop moved, alternate radio connected).
+                    ensureAutomaticPendingTimeout(pending)
+                    Log.w(TAG, "Private media rejected (${preparation.reason}); retrying ($attempt/$MAX_PRIVATE_MEDIA_RETRIES)")
+                    synchronized(pendingConsentLock) {
+                        if (pendingAutomaticPrivateMedia?.requestId == pending.requestId) {
+                            automaticRetryRequestedFor = pending.requestId
+                        }
+                    }
+                    delay(PRIVATE_MEDIA_RETRY_DELAY_MS)
+                    return
+                }
                 clearAutomaticPending(pending.requestId)
                 Log.w(TAG, "Private media not sent: ${preparation.reason}")
                 addPrivateMediaSystemMessage(
@@ -521,6 +605,22 @@ class MediaSendingManager(
                 )
             }
         }
+    }
+
+    /**
+     * True when a Rejected preparation reason points at the transport/route (a transient
+     * condition worth a bounded retry) rather than a terminal policy/preflight rejection.
+     */
+    private fun isTransportRetryable(reason: String): Boolean {
+        val lower = reason.lowercase()
+        return lower.contains("transport") ||
+            lower.contains("no local transport") ||
+            lower.contains("unavailable") ||
+            lower.contains("unreachable") ||
+            lower.contains("no route") ||
+            lower.contains("first hop") ||
+            lower.contains("not connected") ||
+            lower.contains("could not be reached")
     }
 
     private fun reserveAutomaticPending(pending: PendingAutomaticPrivateMedia): Boolean =
@@ -532,14 +632,12 @@ class MediaSendingManager(
 
     private fun ensureAutomaticPendingTimeout(pending: PendingAutomaticPrivateMedia) {
         val shouldStart = synchronized(pendingConsentLock) {
-            if (pendingAutomaticPrivateMedia?.requestId != pending.requestId ||
-                pendingAutomaticTimeoutRequestId == pending.requestId
-            ) return@synchronized false
+            if (pendingAutomaticPrivateMedia?.requestId != pending.requestId) return@synchronized false
             pendingAutomaticTimeoutRequestId = pending.requestId
             true
         }
         if (!shouldStart) return
-        scope.launch {
+        val job = scope.launch {
             delay(PENDING_PRIVATE_MEDIA_TIMEOUT_MS)
             val expired = synchronized(pendingConsentLock) {
                 if (pendingAutomaticPrivateMedia?.requestId != pending.requestId) false
@@ -548,6 +646,7 @@ class MediaSendingManager(
                     if (automaticRetryRequestedFor == pending.requestId) {
                         automaticRetryRequestedFor = null
                     }
+                    pendingTimeoutJobs.remove(pending.requestId)
                     if (pendingAutomaticTimeoutRequestId == pending.requestId) {
                         pendingAutomaticTimeoutRequestId = null
                     }
@@ -555,11 +654,17 @@ class MediaSendingManager(
                 }
             }
             if (expired) {
+                rejectedRetryAttempts.remove(pending.requestId)
                 addPrivateMediaSystemMessage(
                     pending.conversationID,
                     "Private media was not sent because secure session setup timed out."
                 )
             }
+        }
+        // Re-arm: cancel any previous watchdog for this request so retries slide the window.
+        synchronized(pendingConsentLock) {
+            pendingTimeoutJobs[pending.requestId]?.cancel()
+            pendingTimeoutJobs[pending.requestId] = job
         }
     }
 
@@ -572,6 +677,8 @@ class MediaSendingManager(
             if (pendingAutomaticTimeoutRequestId == requestId) {
                 pendingAutomaticTimeoutRequestId = null
             }
+            pendingTimeoutJobs.remove(requestId)?.cancel()
+            rejectedRetryAttempts.remove(requestId)
         }
     }
 

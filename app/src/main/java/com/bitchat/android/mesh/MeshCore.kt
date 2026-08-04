@@ -509,8 +509,11 @@ class MeshCore(
 
             override fun sendToPeer(peerID: String, routed: RoutedPacket): Boolean {
                 val sent = transport.sendPacketToPeer(peerID, routed.packet)
-                TransportBridgeService.sendToPeer(transport.id, peerID, routed.packet)
-                return sent
+                val bridged = TransportBridgeService.sendToPeer(transport.id, peerID, routed.packet)
+                // Cross-transport next hops are delivered via the bridge; report success when
+                // either the local transport OR a bridged transport accepted the write so the
+                // relay does not fall back to a wasteful network-wide flood.
+                return sent || bridged
             }
 
             override fun handleRequestSync(routed: RoutedPacket) {

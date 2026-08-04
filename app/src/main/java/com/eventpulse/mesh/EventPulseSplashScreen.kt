@@ -1,11 +1,13 @@
 package com.eventpulse.mesh
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -18,7 +20,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -26,7 +27,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
 /**
- * EventPulse splash screen with an animated pulse-ring logo and tagline.
+ * Dead Air splash screen with an animated pulse-ring logo and tagline.
  *
  * Displays briefly during app initialization, then transitions to the
  * onboarding flow or main chat screen.
@@ -68,10 +69,13 @@ fun EventPulseSplashScreen(
         label = "innerPulse"
     )
 
+    // Entrance animation for logo
+    // (reserved for future logo entrance animation)
+
     // Tagline fade-in
     var taglineVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        delay(400)
+        delay(300)
         taglineVisible = true
     }
 
@@ -138,7 +142,7 @@ fun EventPulseSplashScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "EP",
+                        text = "DA",
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
                         color = colorScheme.onPrimary
@@ -150,50 +154,39 @@ fun EventPulseSplashScreen(
 
             // App name
             Text(
-                text = "EventPulse",
+                text = "Dead Air",
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = colorScheme.primary
             )
 
-            // Tagline
-            if (taglineVisible) {
+            // Tagline with smooth fade-in
+            AnimatedVisibility(
+                visible = taglineVisible,
+                enter = fadeIn(animationSpec = tween(800, easing = FastOutSlowInEasing))
+            ) {
                 Text(
-                    text = "Offline Venue Engagement",
+                    text = "Offline Mesh Messaging",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Normal,
                     color = colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .padding(top = 8.dp)
-                        .alpha(
-                            remember { androidx.compose.animation.core.Animatable(0f) }
-                                .also { animatable ->
-                                    LaunchedEffect(Unit) {
-                                        animatable.animateTo(
-                                            1f,
-                                            animationSpec = tween(800, easing = FastOutSlowInEasing)
-                                        )
-                                    }
-                                }.value
-                        )
+                    modifier = Modifier.padding(top = 8.dp)
                 )
             }
 
             Spacer(Modifier.height(48.dp))
 
-            // Loading dots
+            // Loading dots with staggered animation
             val dotCount = 3
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 repeat(dotCount) { index ->
-                    val delay = index * 300L
-                    val dotAlpha by remember { mutableStateOf(0.3f) }
                     val transition = rememberInfiniteTransition(label = "dot$index")
                     val alpha by transition.animateFloat(
                         initialValue = 0.3f,
                         targetValue = 1.0f,
                         animationSpec = infiniteRepeatable(
-                            animation = tween(durationMillis = 1200, delayMillis = delay.toInt()),
+                            animation = tween(durationMillis = 1200, delayMillis = index * 300),
                             repeatMode = RepeatMode.Reverse
                         ),
                         label = "dotAlpha$index"
@@ -206,6 +199,16 @@ fun EventPulseSplashScreen(
                     )
                 }
             }
+
+            Spacer(Modifier.height(24.dp))
+
+            // Version info
+            Text(
+                text = "v1.0.0",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Light,
+                color = colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+            )
         }
     }
 }

@@ -770,7 +770,11 @@ fun PeopleSection(
         }
 
         // Offline favorites (exclude ones mapped to connected)
-        val offlineFavorites = FavoritesPersistenceService.shared.getOurFavorites()
+        val offlineFavorites = try {
+            FavoritesPersistenceService.shared.getOurFavorites()
+        } catch (_: Exception) {
+            emptyList()
+        }
         offlineFavorites.forEach { fav ->
             val favPeerID = ContactIdentityResolver.noiseKeyHex(fav.peerNoisePublicKey)
             if (
@@ -1872,8 +1876,6 @@ fun PrivateChatSheet(
                         onSendFileNote = { peer, channel, path ->
                             viewModel.sendFileNote(peer, channel, path)
                         },
-                        onPhotoCaptured = { path -> viewModel.sendCapturedPhoto(path) },
-                        onVoiceNoteReady = { path -> viewModel.sendCapturedVoice(path) },
                         showCommandSuggestions = false,
                         commandSuggestions = emptyList(),
                         showMentionSuggestions = false,

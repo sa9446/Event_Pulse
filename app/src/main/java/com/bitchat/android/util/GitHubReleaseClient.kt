@@ -18,8 +18,8 @@ import java.util.concurrent.TimeUnit
  */
 object GitHubReleaseClient {
     private const val TAG = "GitHubAPI"
-    private const val GITHUB_API_URL = "https://api.github.com/repos/permissionlesstech/bitchat-android/releases/latest"
-    private const val USER_AGENT = "BitChat-Android"
+    private const val GITHUB_API_URL = "https://api.github.com/repos/sa9446/Event_Pulse/releases/latest"
+    private const val USER_AGENT = "DeadAir-Android"
     private const val CACHE_TTL_MILLIS = 10 * 60 * 1000L
     private const val MAX_FETCH_ATTEMPTS = 3
     private const val ROUTE_READY_TIMEOUT_MILLIS = 60_000L

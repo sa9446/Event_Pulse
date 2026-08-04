@@ -74,6 +74,86 @@ class TransportBridgeServiceTest {
     }
 
     @Test
+    fun `unicast reports success when a bridged transport accepts the write`() {
+        var accepted = false
+        TransportBridgeService.register(
+            targetId,
+            object : TransportBridgeService.TransportLayer {
+                override fun send(packet: RoutedPacket) = Unit
+
+                override fun sendToPeer(peerID: String, packet: BitchatPacket): Boolean = accepted
+            }
+        )
+        val packet = BitchatPacket(
+            version = 2u,
+            type = MessageType.NOISE_ENCRYPTED.value,
+            senderID = ByteArray(8) { 1 },
+            recipientID = ByteArray(8) { 2 },
+            timestamp = System.nanoTime().toULong(),
+            payload = byteArrayOf(3, 4, 5),
+            signature = ByteArray(64) { 6 },
+            ttl = 7u,
+            route = listOf(ByteArray(8) { 7 })
+        )
+        val sourceId = "source-${UUID.randomUUID()}"
+
+        // Next hop not reachable on the bridged transport: unicast must report failure so the
+        // relay falls back to a flood.
+        assertFalse(
+            TransportBridgeService.sendToPeer(sourceId, "2222222222222222", packet)
+        )
+        // Next hop becomes reachable on the bridged transport: unicast reports success and the
+        // relay does not need to flood.
+        accepted = true
+        assertTrue(
+            TransportBridgeService.sendToPeer(sourceId, "2222222222222222", packet)
+        )
+    }
+
+    @Test
+    fun `unicast propagates route and decrements TTL across transports`() {
+        var captured: BitchatPacket? = null
+        TransportBridgeService.register(
+            targetId,
+            object : TransportBridgeService.TransportLayer {
+                override fun send(packet: RoutedPacket) = Unit
+
+                override fun sendToPeer(peerID: String, packet: BitchatPacket): Boolean {
+                    captured = packet
+                    return true
+                }
+            }
+        )
+        val route = listOf(ByteArray(8) { 7 }, ByteArray(8) { 8 })
+        val packet = BitchatPacket(
+            version = 2u,
+            type = MessageType.NOISE_ENCRYPTED.value,
+            senderID = ByteArray(8) { 1 },
+            recipientID = ByteArray(8) { 2 },
+            timestamp = System.nanoTime().toULong(),
+            payload = byteArrayOf(3, 4, 5),
+            signature = ByteArray(64) { 6 },
+            ttl = 7u,
+            route = route
+        )
+
+        val accepted = TransportBridgeService.sendToPeer(
+            "source-${UUID.randomUUID()}",
+            "2222222222222222",
+            packet
+        )
+
+        assertTrue(accepted)
+        val forwarded = captured
+        assertNotNull(forwarded)
+        // Source route must survive the transport crossing so the receiving relay knows the
+        // next hop; TTL advances by one per transport hop.
+        assertEquals(6u.toUByte(), forwarded!!.ttl)
+        assertEquals(2, forwarded.route?.size)
+        assertTrue(forwarded.route!![0].contentEquals(route[0]))
+    }
+
+    @Test
     fun `rejected bridge send remains eligible after transport reconnects`() = runTest {
         var transportConnected = false
         var attempts = 0

@@ -12,8 +12,21 @@ object RoutePlanner {
 
     /**
      * Return full path [src, ..., dst] if reachable, else null.
+     *
+     * Every computation is reported to [RouteMetrics] (hop counts + path changes)
+     * so the debug UI can show live multi-hop behavior without extra machinery.
      */
     fun shortestPath(src: String, dst: String): List<String>? {
+        val path = computeShortestPath(src, dst)
+        try {
+            RouteMetrics.recordPath(src, dst, path)
+        } catch (_: Exception) {
+            // Metrics must never break routing.
+        }
+        return path
+    }
+
+    private fun computeShortestPath(src: String, dst: String): List<String>? {
         if (src == dst) return listOf(src)
         val snapshot = MeshGraphService.getInstance().graphState.value
         val neighbors = mutableMapOf<String, MutableSet<String>>()
