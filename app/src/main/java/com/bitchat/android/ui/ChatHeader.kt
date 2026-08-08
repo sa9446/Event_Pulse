@@ -328,7 +328,13 @@ internal fun TorAwareHeaderIcon(
 @Composable
 fun NoiseSessionIcon(
     sessionState: String?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /**
+     * True when the established session negotiated the hybrid ML-KEM (post-quantum) protocol.
+     * Renders a tiny "PQ" pill on the lock so the user can tell a post-quantum session from a
+     * classic X25519 one at a glance.
+     */
+    isPostQuantum: Boolean = false
 ) {
     val palette = LocalBitchatPalette.current
     val colorScheme = MaterialTheme.colorScheme
@@ -342,7 +348,11 @@ fun NoiseSessionIcon(
         sessionState == "established" -> Triple(
             colorScheme.primary,
             false,
-            stringResource(R.string.cd_encrypted)
+            if (isPostQuantum) {
+                stringResource(R.string.cd_encrypted_post_quantum)
+            } else {
+                stringResource(R.string.cd_encrypted)
+            }
         )
         sessionState?.startsWith("failed") == true -> Triple(
             colorScheme.error,
@@ -373,18 +383,39 @@ fun NoiseSessionIcon(
         label = "noiseSessionTint"
     )
 
-    Crossfade(
-        targetState = lockIconRes,
-        animationSpec = tween(durationMillis = lockTransitionMs, easing = FastOutSlowInEasing),
-        modifier = modifier,
-        label = "noiseLockGlyph"
-    ) { iconRes ->
-        TorAwareHeaderIcon(
-            painter = painterResource(iconRes),
-            tint = animatedTint,
-            isProgress = isProgress,
-            contentDescription = contentDescription,
-        )
+    Box(modifier = modifier) {
+        Crossfade(
+            targetState = lockIconRes,
+            animationSpec = tween(durationMillis = lockTransitionMs, easing = FastOutSlowInEasing),
+            label = "noiseLockGlyph"
+        ) { iconRes ->
+            TorAwareHeaderIcon(
+                painter = painterResource(iconRes),
+                tint = animatedTint,
+                isProgress = isProgress,
+                contentDescription = contentDescription,
+            )
+        }
+
+        // Post-quantum sessions get a tiny badge sitting on the lock's corner. It appears only
+        // once the handshake resolves to established so it never flashes during the handshake.
+        if (sessionState == "established" && isPostQuantum) {
+            Text(
+                text = "PQ",
+                color = colorScheme.primary,
+                fontSize = 6.5.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = 2.dp, y = 1.dp)
+                    .background(
+                        color = colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(3.dp)
+                    )
+                    .padding(horizontal = 2.dp, vertical = 1.dp)
+            )
+        }
     }
 }
 

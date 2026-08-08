@@ -150,6 +150,7 @@
     <string name="cd_file">파일</string>
     <string name="cd_image">이미지</string>
     <string name="cd_cancel">취소</string>
+    <string name="cd_retry">다시 보내기</string>
     <string name="cd_link">링크</string>
     <string name="cd_pick_media">미디어 선택</string>
     <string name="cd_pick_file">파일 선택</string>

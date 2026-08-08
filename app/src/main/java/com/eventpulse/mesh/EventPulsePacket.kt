@@ -7,7 +7,7 @@ import java.nio.charset.StandardCharsets
 /**
  * Feature B+E: Extended Structured Packet Payload
  *
- * Supports text, media chunks, retraction signals, and SOS alerts.
+ * Supports text, media chunks, and retraction signals.
  * Max 512 bytes when serialized to UTF-8 JSON.
  *
  * PERF: Uses a shared singleton Gson instance (avoids repeated GsonBuilder allocation).
@@ -17,7 +17,6 @@ import java.nio.charset.StandardCharsets
  *   - "TEXT"         Standard chat message
  *   - "MEDIA_CHUNK"  Fragment of a media file (chunk_index / total_chunks)
  *   - "RETRACT"      Withdraw a previously sent message by msg_id
- *   - "SOS"          Emergency broadcast (bypasses filters)
  */
 data class EventPulsePayload(
     val msg_id: String = "",

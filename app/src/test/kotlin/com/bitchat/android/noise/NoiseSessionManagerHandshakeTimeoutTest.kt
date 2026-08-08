@@ -134,7 +134,11 @@ class NoiseSessionManagerHandshakeTimeoutTest {
     private fun manager(identity: TestIdentity): NoiseSessionManager = NoiseSessionManager(
         localStaticPrivateKey = identity.privateKey,
         localStaticPublicKey = identity.publicKey,
-        localPeerID = identity.peerID
+        localPeerID = identity.peerID,
+        // These tests pin the classic X25519 protocol: a timed-out classic handshake is fully
+        // removed by the sweep (no post-quantum classic-retry fallback), which is the exact
+        // session-lifetime contract these tests assert.
+        postQuantumProvider = { false }
     ).also { managers += it }
 
     private fun identity(): TestIdentity {

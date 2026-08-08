@@ -183,7 +183,9 @@ class FragmentManagerTest {
     }
 
     @Test
-    fun `inbound fragment set above 256 is rejected`() {
+    fun `partial inbound fragment set does not reassemble`() {
+        // A single fragment of a 257-part set (well under Android's MAX_FRAGMENTS_PER_ID
+        // = 10_000) must not reassemble until every part arrives.
         val payload = FragmentPayload(
             fragmentID = ByteArray(8) { 1 },
             index = 0,
@@ -215,6 +217,29 @@ class FragmentManagerTest {
                 data = byteArrayOf(1)
             ).encode()
         }
+    }
+
+    @Test
+    fun `small fragment sets keep the base assembly window`() {
+        val base = com.bitchat.android.util.AppConstants.Fragmentation.FRAGMENT_TIMEOUT_MS
+        // A single fragment (and any set well under a full MB of declared size) uses the
+        // base window so small chat messages still reclaim memory quickly.
+        assertEquals(base, fragmentManager.fragmentTimeoutFor(1))
+        assertEquals(base, fragmentManager.fragmentTimeoutFor(100))
+    }
+
+    @Test
+    fun `large fragment sets get a size-scaled window capped at the max`() {
+        val base = com.bitchat.android.util.AppConstants.Fragmentation.FRAGMENT_TIMEOUT_MS
+        val perMb = com.bitchat.android.util.AppConstants.Fragmentation.FRAGMENT_TIMEOUT_PER_MB_MS
+        val max = com.bitchat.android.util.AppConstants.Fragmentation.FRAGMENT_TIMEOUT_MAX_MS
+        // ~2.3 MB declared -> 2 full MBs of scale + base.
+        assertEquals(base + 2 * perMb, fragmentManager.fragmentTimeoutFor(5_000))
+        // ~4.6 MB declared (the practical Android ceiling) -> 4 full MBs of scale + base,
+        // still under the hard ceiling.
+        assertEquals(base + 4 * perMb, fragmentManager.fragmentTimeoutFor(10_000))
+        // Declared totals beyond the practical range clamp to the hard ceiling.
+        assertEquals(max, fragmentManager.fragmentTimeoutFor(0xFFFF))
     }
 
     @Test

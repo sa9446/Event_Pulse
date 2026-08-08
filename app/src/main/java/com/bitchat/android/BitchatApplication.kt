@@ -63,6 +63,13 @@ class BitchatApplication : Application() {
         try {
             ThemePreferenceManager.init(this)
         } catch (_: Exception) {}
+
+        // Mesh service preferences — needed before ANY code path can start the
+        // foreground service (UI, permission grants, boot receiver). Must run on
+        // the critical path: a deferred init could race with an early service start.
+        try {
+            com.bitchat.android.service.MeshServicePreferences.init(this)
+        } catch (_: Exception) {}
     }
 
     /**
@@ -111,11 +118,6 @@ class BitchatApplication : Application() {
         // Nostr background runtime
         try {
             com.bitchat.android.nostr.NostrBackgroundRuntime.initialize(this)
-        } catch (_: Exception) {}
-
-        // Mesh service preferences
-        try {
-            com.bitchat.android.service.MeshServicePreferences.init(this)
         } catch (_: Exception) {}
 
         // Proactively start the foreground service to keep mesh alive

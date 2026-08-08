@@ -26,12 +26,25 @@ import com.bitchat.android.features.media.ImageUtils
 import com.bitchat.android.ui.ComposerActionSurface
 import com.bitchat.android.ui.ComposerIconSize
 import java.io.File
+import android.util.Log
+
+private const val TAG = "ImagePickerButton"
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ImagePickerButton(
     modifier: Modifier = Modifier,
-    onImageReady: (String) -> Unit
+    onImageReady: (String) -> Unit,
+    /**
+     * Longest-side bound for the outgoing image. BLE-only conversations pass a smaller bound
+     * (see ImageUtils.BLE_ONLY_IMAGE_MAX_DIM) so the payload rides the slow radio faster.
+     */
+    maxImageDim: Int = ImageUtils.DEFAULT_IMAGE_MAX_DIM,
+    /**
+     * JPEG quality for the outgoing image. BLE-only conversations pass a lower quality
+     * (see ImageUtils.BLE_ONLY_IMAGE_QUALITY) to shrink the payload further.
+     */
+    maxImageQuality: Int = ImageUtils.DEFAULT_IMAGE_QUALITY
 ) {
     val context = LocalContext.current
     var capturedImagePath by remember { mutableStateOf<String?>(null) }
@@ -40,7 +53,7 @@ fun ImagePickerButton(
         contract = ActivityResultContracts.GetContent()
     ) { uri: android.net.Uri? ->
         if (uri != null) {
-            val outPath = ImageUtils.downscaleAndSaveToAppFiles(context, uri)
+            val outPath = ImageUtils.downscaleAndSaveToAppFiles(context, uri, maxDim = maxImageDim, quality = maxImageQuality)
             if (!outPath.isNullOrBlank()) onImageReady(outPath)
         }
     }
@@ -50,12 +63,26 @@ fun ImagePickerButton(
     ) { success ->
         val path = capturedImagePath
         if (success && !path.isNullOrBlank()) {
-            // Downscale + correct orientation, then send; delete original
-            val outPath = com.bitchat.android.features.media.ImageUtils.downscalePathAndSaveToAppFiles(context, path)
+            // Downscale + correct orientation, then send.
+            val outPath = com.bitchat.android.features.media.ImageUtils.downscalePathAndSaveToAppFiles(
+                context,
+                path,
+                maxDim = maxImageDim,
+                quality = maxImageQuality
+            )
             if (!outPath.isNullOrBlank()) {
                 onImageReady(outPath)
+                // Only the original camera capture can be cleaned up here: the send is
+                // asynchronous, so never delete the file we just handed to it.
+                if (outPath != path) runCatching { File(path).delete() }
+            } else {
+                // Decode/compress failed for the captured photo. Fall back to sending the
+                // untouched camera file: it is a valid JPEG on disk, and the size gate in
+                // MediaSendingManager will surface a clear message if it is too large.
+                // The async sender owns that file now, so do NOT delete it here.
+                Log.w(TAG, "Camera capture downscale failed; sending original capture")
+                onImageReady(path)
             }
-            runCatching { File(path).delete() }
         } else {
             // Cleanup on cancel/failure
             path?.let { runCatching { File(it).delete() } }
@@ -75,7 +102,7 @@ fun ImagePickerButton(
             capturedImagePath = file.absolutePath
             takePictureLauncher.launch(uri)
         } catch (e: Exception) {
-            android.util.Log.e("ImagePickerButton", "Camera capture failed", e)
+            Log.e(TAG, "Camera capture failed", e)
         }
     }
 

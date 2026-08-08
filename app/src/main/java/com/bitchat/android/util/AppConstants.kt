@@ -40,11 +40,20 @@ object AppConstants {
     object Fragmentation {
         const val FRAGMENT_SIZE_THRESHOLD: Int = 512
         const val MAX_FRAGMENT_SIZE: Int = 469
+        // Base receiver reassembly window for small fragment sets. Large sets get a size-scaled
+        // window on top (see FRAGMENT_TIMEOUT_PER_MB_MS) so slow BLE links can finish multi-MB
+        // transfers instead of being torn down mid-stream. iOS peers still clean up at 30s;
+        // this governs Android's own receive side (Android-to-Android and Android as receiver).
         const val FRAGMENT_TIMEOUT_MS: Long = 30_000L
+        // Extra assembly time granted per declared megabyte of a fragment set.
+        const val FRAGMENT_TIMEOUT_PER_MB_MS: Long = 120_000L // 2 minutes per MB
+        // Hard ceiling for any single set's assembly window, whatever its declared size.
+        const val FRAGMENT_TIMEOUT_MAX_MS: Long = 600_000L // 10 minutes
         const val CLEANUP_INTERVAL_MS: Long = 10_000L
         // ~462 bytes of payload per fragment; 10_000 fragments supports roughly 4 MB.
         // Note: iOS peers running the upstream bitchat build only accept 256 fragments
-        // (~118 KB); Android-to-Android transfers can use the full range.
+        // (~118 KB) — a peer-side limit this codebase cannot raise; Android-to-Android
+        // transfers can use the full range.
         const val MAX_FRAGMENTS_PER_ID: Int = 10_000
         const val MAX_FRAGMENT_TOTAL_BYTES: Int = 5 * 1_048_576
         const val MAX_ACTIVE_FRAGMENT_SETS: Int = 64
@@ -133,9 +142,12 @@ object AppConstants {
     }
 
     object Media {
-        // Practical mesh transfer ceiling: the fragmentation caps above support ~4 MB
-        // of payload. Anything larger is rejected up front with a clear message.
-        const val MAX_FILE_SIZE_BYTES: Long = 4L * 1024 * 1024
+        // Practical mesh transfer ceiling. The fragmentation caps above can carry roughly
+        // 4.35 MB of payload even on the worst case (multi-hop routed private media), so the
+        // send cap is set just under that: anything larger is rejected up front with a clear
+        // message. The receiver's assembly window scales with declared size (up to 10 minutes),
+        // so this ceiling is bounded by the fragment-count cap rather than the timeout.
+        const val MAX_FILE_SIZE_BYTES: Long = 4_300_000L
     }
 
     object Router {

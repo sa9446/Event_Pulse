@@ -150,6 +150,7 @@
     <string name="cd_file">File</string>
     <string name="cd_image">Larawan</string>
     <string name="cd_cancel">Kanselahin</string>
+    <string name="cd_retry">Ipadala muli</string>
     <string name="cd_link">Link</string>
     <string name="cd_pick_media">Pumili ng media</string>
     <string name="cd_record_voice">Mag‑record ng voice note</string>

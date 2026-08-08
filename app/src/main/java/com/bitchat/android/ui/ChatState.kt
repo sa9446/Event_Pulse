@@ -113,6 +113,11 @@ class ChatState(
     // Noise session states for peers (for reactive UI updates)
     private val _peerSessionStates = MutableStateFlow<Map<String, String>>(emptyMap())
     val peerSessionStates: StateFlow<Map<String, String>> = _peerSessionStates.asStateFlow()
+
+    // Whether each peer's established Noise session negotiated the hybrid ML-KEM
+    // (post-quantum) protocol rather than the classic X25519 fallback.
+    private val _peerPostQuantum = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    val peerPostQuantum: StateFlow<Map<String, Boolean>> = _peerPostQuantum.asStateFlow()
     
     // Peer fingerprint state for reactive favorites (for reactive UI updates)
     private val _peerFingerprints = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -317,6 +322,10 @@ class ChatState(
     
     fun setPeerSessionStates(states: Map<String, String>) {
         _peerSessionStates.value = states
+    }
+
+    fun setPeerPostQuantum(postQuantum: Map<String, Boolean>) {
+        _peerPostQuantum.value = postQuantum
     }
     
     fun setPeerFingerprints(fingerprints: Map<String, String>) {

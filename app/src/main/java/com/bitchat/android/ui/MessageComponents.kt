@@ -8,6 +8,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.Animatable
@@ -217,7 +218,8 @@ fun MessagesList(
     onNicknameClick: ((String) -> Unit)? = null,
     onMessageLongPress: ((BitchatMessage) -> Unit)? = null,
     onCancelTransfer: ((BitchatMessage) -> Unit)? = null,
-    onImageClick: ((String, List<String>, Int) -> Unit)? = null
+    onImageClick: ((String, List<String>, Int) -> Unit)? = null,
+    onRetrySend: ((BitchatMessage) -> Unit)? = null
 ) {
     val resolvedMentionPeerIdentities = remember(messages, mentionPeerIdentities) {
         mentionPeerIdentities ?: buildMentionPeerIdentityMap(messages)
@@ -360,6 +362,7 @@ fun MessagesList(
                 onMessageLongPress = onMessageLongPress,
                 onCancelTransfer = onCancelTransfer,
                 onImageClick = onImageClick,
+                onRetrySend = onRetrySend,
                 modifier = Modifier
                     // Animates the shift when a neighbour is inserted or removed: this is what
                     // makes the conversation glide up instead of jumping.
@@ -390,6 +393,7 @@ fun MessageItem(
     onMessageLongPress: ((BitchatMessage) -> Unit)? = null,
     onCancelTransfer: ((BitchatMessage) -> Unit)? = null,
     onImageClick: ((String, List<String>, Int) -> Unit)? = null,
+    onRetrySend: ((BitchatMessage) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val colorScheme = MaterialTheme.colorScheme
@@ -423,6 +427,7 @@ fun MessageItem(
                     onMessageLongPress = onMessageLongPress,
                     onCancelTransfer = onCancelTransfer,
                     onImageClick = onImageClick,
+                    onRetrySend = onRetrySend,
                     modifier = Modifier
                         .weight(1f)
                         .padding(end = endPad)
@@ -462,6 +467,7 @@ fun MessageItem(
         onMessageLongPress: ((BitchatMessage) -> Unit)?,
         onCancelTransfer: ((BitchatMessage) -> Unit)?,
         onImageClick: ((String, List<String>, Int) -> Unit)?,
+        onRetrySend: ((BitchatMessage) -> Unit)?,
         modifier: Modifier = Modifier
     ) {
     val palette = LocalBitchatPalette.current
@@ -480,6 +486,7 @@ fun MessageItem(
             onMessageLongPress = onMessageLongPress,
             onCancelTransfer = onCancelTransfer,
             onImageClick = onImageClick,
+            onRetrySend = onRetrySend,
             modifier = modifier
         )
         return
@@ -497,6 +504,7 @@ fun MessageItem(
             onNicknameClick = onNicknameClick,
             onMessageLongPress = onMessageLongPress,
             onCancelTransfer = onCancelTransfer,
+            onRetrySend = onRetrySend,
             modifier = modifier
         )
         return
@@ -596,6 +604,28 @@ fun MessageItem(
                                     imageVector = Icons.Filled.Close,
                                     contentDescription = stringResource(R.string.cd_cancel),
                                     tint = colorScheme.onSurface,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+
+                        // One-tap retry button on a failed send (replaces the ⚠ dead-end)
+                        val showRetry = message.sender == currentUserNickname &&
+                            (message.deliveryStatus is DeliveryStatus.Failed)
+                        if (showRetry) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(4.dp)
+                                    .size(22.dp)
+                                    .background(colorScheme.error.copy(alpha = 0.85f), CircleShape)
+                                    .clickable { onRetrySend?.invoke(message) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Refresh,
+                                    contentDescription = stringResource(R.string.cd_retry),
+                                    tint = Color.White,
                                     modifier = Modifier.size(14.dp)
                                 )
                             }

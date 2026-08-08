@@ -163,6 +163,7 @@
   <string name="cd_file">Fail</string>
   <string name="cd_image">Imej</string>
   <string name="cd_cancel">Batal</string>
+  <string name="cd_retry">Hantar semula</string>
   <string name="cd_link">Pautan</string>
   <string name="cd_record_voice">Rakam nota suara</string>
   <string name="cd_pick_media">Pilih media</string>

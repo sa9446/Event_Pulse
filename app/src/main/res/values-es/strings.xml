@@ -150,6 +150,7 @@
     <string name="cd_file">Archivo</string>
     <string name="cd_image">Imagen</string>
     <string name="cd_cancel">Cancelar</string>
+    <string name="cd_retry">Reintentar envío</string>
     <string name="cd_link">Enlace</string>
     <string name="cd_pick_media">Elegir medios</string>
     <string name="cd_pick_file">Elegir archivo</string>

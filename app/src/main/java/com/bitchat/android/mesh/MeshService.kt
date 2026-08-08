@@ -37,9 +37,18 @@ interface MeshService {
     fun getActivePeerCount(): Int
     fun hasEstablishedSession(peerID: String): Boolean
     fun getSessionState(peerID: String): com.bitchat.android.noise.NoiseSession.NoiseSessionState
+    fun isSessionPostQuantum(peerID: String): Boolean
     fun initiateNoiseHandshake(peerID: String)
     fun getPeerFingerprint(peerID: String): String?
     fun getPeerInfo(peerID: String): PeerInfo?
+
+    /**
+     * True when [peerID] is currently reachable only over BLE (no Wi-Fi Aware or Wi-Fi Direct
+     * link). Used to pick a more aggressive image-compression tier for slow BLE-only transfers.
+     * Defaults to false; the unified mesh service is the authority on transport selection.
+     */
+    fun isPeerBleOnly(peerID: String): Boolean = false
+
     fun updatePeerInfo(
         peerID: String,
         nickname: String,

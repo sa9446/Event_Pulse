@@ -150,6 +150,7 @@
     <string name="cd_file">فایل</string>
     <string name="cd_image">تصویر</string>
     <string name="cd_cancel">لغو</string>
+    <string name="cd_retry">ارسال مجدد</string>
     <string name="cd_link">پیوند</string>
     <string name="cd_pick_media">انتخاب رسانه</string>
     <string name="cd_pick_file">انتخاب فایل</string>

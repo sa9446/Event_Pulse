@@ -150,6 +150,7 @@
     <string name="cd_file">ফাইল</string>
     <string name="cd_image">ছবি</string>
     <string name="cd_cancel">বাতিল</string>
+    <string name="cd_retry">আবার পাঠান</string>
     <string name="cd_link">লিঙ্ক</string>
     <string name="cd_pick_media">মিডিয়া নির্বাচন করুন</string>
     <string name="cd_pick_file">ফাইল নির্বাচন করুন</string>

@@ -31,8 +31,6 @@ import androidx.compose.ui.unit.sp
 
 // ─── Color Palette ─────────────────────────────────────────────────────
 object EventPulseColors {
-    val sosRed = Color(0xFFE53935)
-    val sosRedLight = Color(0xFFFFCDD2)
     val densityLow = Color(0xFF4CAF50)
     val densityMedium = Color(0xFFFFC107)
     val densityPacked = Color(0xFFE53935)
@@ -149,7 +147,6 @@ fun EventPulseMessageCard(
     body: String,
     timestamp: Long,
     isVerified: Boolean = false,
-    isSOS: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val colorScheme = MaterialTheme.colorScheme
@@ -162,12 +159,12 @@ fun EventPulseMessageCard(
         }
     } }
 
-    val bgColor = remember(isSOS) { if (isSOS) EventPulseColors.sosRedLight else colorScheme.surfaceVariant.copy(alpha = 0.6f) }
+    val bgColor = colorScheme.surfaceVariant.copy(alpha = 0.6f)
 
-    Surface(modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = bgColor, tonalElevation = if (isSOS) 4.dp else 1.dp) {
+    Surface(modifier = modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = bgColor, tonalElevation = 1.dp) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(sender, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (isSOS) EventPulseColors.sosRed else colorScheme.primary)
+                Text(sender, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colorScheme.primary)
                 if (isVerified) Surface(shape = CircleShape, color = EventPulseColors.verifiedBadge, modifier = Modifier.size(14.dp)) {
                     Box(contentAlignment = Alignment.Center) { Text("✓", fontSize = 9.sp, color = Color.White, fontWeight = FontWeight.Bold) }
                 }

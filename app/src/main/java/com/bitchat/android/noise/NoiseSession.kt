@@ -13,24 +13,34 @@ class NoiseSession(
     private val peerID: String,
     private val isInitiator: Boolean,
     private val localStaticPrivateKey: ByteArray,
-    private val localStaticPublicKey: ByteArray
+    private val localStaticPublicKey: ByteArray,
+    /**
+     * When true the handshake uses the hybrid post-quantum protocol
+     * Noise_XXhfs_25519+MLKEM768_ChaChaPoly_SHA256 (X25519 + ML-KEM-768). When false it falls
+     * back to the classic X25519-only protocol for interoperability with older builds.
+     */
+    private val postQuantum: Boolean = true
 ) {
     
     companion object {
         private const val TAG = "NoiseSession"
         private const val NOISE_XX_PATTERN_LENGTH = 3
+
+        // ML-KEM-768 (FIPS 203) wire sizes used by the hybrid XXhfs handshake.
+        const val MLKEM_PUBLIC_KEY_SIZE = 1184   // encapsulation key (ek), sent in msg 1
+        const val MLKEM_CIPHERTEXT_SIZE = 1088   // ciphertext (ct), sent in msg 2
         
-        // Noise Protocol Configuration (exactly matching iOS)
-        private const val PROTOCOL_NAME = "Noise_XX_25519_ChaChaPoly_SHA256"
+        // Classic X25519-only protocol (exactly matching iOS).
+        private const val CLASSIC_PROTOCOL_NAME = "Noise_XX_25519_ChaChaPoly_SHA256"
+        
+        // Hybrid post-quantum protocol: XXhfs pattern with X25519 static/ephemeral keys plus an
+        // ML-KEM-768 hybrid component whose shared secret is mixed into the chaining key via the
+        // 'F'/'FF' tokens. Session keys are therefore safe even if X25519 is later broken.
+        private const val POST_QUANTUM_PROTOCOL_NAME = "Noise_XXhfs_25519+MLKEM768_ChaChaPoly_SHA256"
         
         // Rekey thresholds (same as iOS)
         private const val REKEY_TIME_LIMIT = com.bitchat.android.util.AppConstants.Noise.REKEY_TIME_LIMIT_MS // 1 hour
         private const val REKEY_MESSAGE_LIMIT = com.bitchat.android.util.AppConstants.Noise.REKEY_MESSAGE_LIMIT_SESSION // 10k messages
-        
-        // XX Pattern Message Sizes (exactly matching iOS implementation)
-        private const val XX_MESSAGE_1_SIZE = 32      // -> e (ephemeral key only)
-        private const val XX_MESSAGE_2_SIZE = 96      // <- e, ee, s, es (32 + 48) + 16 (MAC)
-        private const val XX_MESSAGE_3_SIZE = 48      // -> s, se (encrypted static key)
         
         // Maximum payload size for safety
         private const val MAX_PAYLOAD_SIZE = com.bitchat.android.util.AppConstants.Noise.MAX_PAYLOAD_SIZE_BYTES
@@ -147,6 +157,14 @@ class NoiseSession(
     private var handshakeState: HandshakeState? = null
     private var sendCipher: CipherState? = null
     private var receiveCipher: CipherState? = null
+
+    // XX Pattern Message Sizes - depend on whether the hybrid ML-KEM exchange is enabled.
+    // Classic:  msg1 = e (32),            msg2 = e, ee, s, es (96),        msg3 = s, se (48)
+    // PQ:       msg1 = e (32) + f (1184), msg2 = e + f + ee, ff, s, es (1184), msg3 = s, se (64)
+    // These are used purely for buffer sizing; the Noise library validates the actual wire sizes.
+    private val xxMessage1Size: Int = if (postQuantum) 32 + MLKEM_PUBLIC_KEY_SIZE else 32
+    private val xxMessage2Size: Int =
+        if (postQuantum) 32 + MLKEM_CIPHERTEXT_SIZE + 16 + 32 + 16 else 96
     
     // Session state
     private var state: NoiseSessionState = NoiseSessionState.Uninitialized
@@ -200,6 +218,12 @@ class NoiseSession(
     fun getHandshakeStartMs(): Long? = handshakeStartMs
     fun getLastHandshakeActivityMs(): Long? = lastHandshakeActivityMs
 
+    /**
+     * Whether this session's handshake used the hybrid ML-KEM (post-quantum) protocol.
+     * Always false for sessions that negotiated the classic X25519 fallback.
+     */
+    fun isPostQuantumSession(): Boolean = postQuantum
+
     internal fun getHandshakeMessage1(): ByteArray? = handshakeMessage1?.clone()
 
     internal fun setLastHandshakeActivityForTest(timestampMs: Long) {
@@ -241,7 +265,9 @@ class NoiseSession(
      */
     private fun initializeNoiseHandshake(role: Int) {
         try {
-            handshakeState = HandshakeState(PROTOCOL_NAME, role)
+            val protocolName =
+                if (postQuantum) POST_QUANTUM_PROTOCOL_NAME else CLASSIC_PROTOCOL_NAME
+            handshakeState = HandshakeState(protocolName, role)
 
             if (handshakeState?.needsLocalKeyPair() == true) {
                 val localKeyPair = handshakeState?.getLocalKeyPair()
@@ -290,7 +316,7 @@ class NoiseSession(
             }
             lastHandshakeActivityMs = System.currentTimeMillis()
             
-            val messageBuffer = ByteArray(XX_MESSAGE_1_SIZE)
+            val messageBuffer = ByteArray(xxMessage1Size)
             val handshakeStateLocal = handshakeState ?: throw IllegalStateException("Handshake state is null")
             val messageLength = handshakeStateLocal.writeMessage(messageBuffer, 0, null, 0, 0)
             currentPattern++
@@ -298,8 +324,8 @@ class NoiseSession(
             handshakeMessage1 = firstMessage
             
             // Validate message size matches XX pattern expectations
-            if (firstMessage.size != XX_MESSAGE_1_SIZE) {
-                Log.w(TAG, "XX message 1 size ${firstMessage.size} != expected $XX_MESSAGE_1_SIZE")
+            if (firstMessage.size != xxMessage1Size) {
+                Log.w(TAG, "XX message 1 size ${firstMessage.size} != expected $xxMessage1Size")
             }
 
             return firstMessage
@@ -334,7 +360,7 @@ class NoiseSession(
             val handshakeStateLocal = handshakeState ?: throw IllegalStateException("Handshake state is null")
             
             // Let the Noise library validate message sizes and handle the flow
-            val payloadBuffer = ByteArray(XX_MESSAGE_2_SIZE + MAX_PAYLOAD_SIZE)  // Buffer for any payload data
+            val payloadBuffer = ByteArray(xxMessage2Size + MAX_PAYLOAD_SIZE)  // Buffer for any payload data
             
             // Read the incoming message - the Noise library will handle validation
             val payloadLength = handshakeStateLocal.readMessage(message, 0, message.size, payloadBuffer, 0)
@@ -346,7 +372,7 @@ class NoiseSession(
             return when (action) {
                 HandshakeState.WRITE_MESSAGE -> {
                     // Noise library says we need to send a response
-                    val responseBuffer = ByteArray(XX_MESSAGE_2_SIZE + MAX_PAYLOAD_SIZE) // Large buffer for any response
+                    val responseBuffer = ByteArray(xxMessage2Size + MAX_PAYLOAD_SIZE) // Large buffer for any response
                     val responseLength = handshakeStateLocal.writeMessage(responseBuffer, 0, null, 0, 0)
                     currentPattern++
                     val response = responseBuffer.copyOf(responseLength)
@@ -602,6 +628,7 @@ class NoiseSession(
         appendLine("NoiseSession with $peerID:")
         appendLine("  State: $state")
         appendLine("  Role: ${if (isInitiator) "initiator" else "responder"}")
+        appendLine("  Post-quantum (ML-KEM-768): ${if (postQuantum) "yes" else "no (classic X25519)"}")
         appendLine("  Messages sent: $messagesSent")
         appendLine("  Messages received: $messagesReceived")
         appendLine("  Session age: ${(System.currentTimeMillis() - creationTime) / 1000}s")

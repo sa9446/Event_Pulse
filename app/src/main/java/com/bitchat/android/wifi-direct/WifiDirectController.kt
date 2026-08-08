@@ -2,6 +2,7 @@ package com.bitchat.android.wifidirect
 
 import android.content.Context
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -12,9 +13,8 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * WifiDirectController manages lifecycle and debug surfacing for the WifiDirectMeshService.
  *
- * The transport runs in parallel with BLE and Wi-Fi Aware: it provides a second high-bandwidth
- * Wi-Fi medium (direct P2P group, no access point) that MediaSendingManager prefers for large
- * payloads while BLE keeps discovery/presence duties.
+ * Wi-Fi is the primary transport: Direct provides a high-bandwidth P2P medium (no access point)
+ * alongside Wi-Fi Aware, with BLE running as a secondary fallback for discovery.
  */
 object WifiDirectController {
     private const val TAG = "WifiDirectController"
@@ -159,4 +159,14 @@ object WifiDirectController {
     }
 
     fun getService(): WifiDirectMeshService? = service
+
+    /**
+     * Test seam: swaps in a fake/stubbed transport service (or clears it with null).
+     * Production code routes exclusively through [startIfPossible]/[stop]; this exists so
+     * unit tests can exercise transport selection without driving the real Wi-Fi stack.
+     */
+    @VisibleForTesting
+    internal fun setServiceForTest(service: WifiDirectMeshService?) {
+        synchronized(lifecycleLock) { this.service = service }
+    }
 }

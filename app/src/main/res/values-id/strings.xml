@@ -150,6 +150,7 @@
     <string name="cd_file">File</string>
     <string name="cd_image">Gambar</string>
     <string name="cd_cancel">Batal</string>
+    <string name="cd_retry">Kirim ulang</string>
     <string name="cd_link">Tautan</string>
     <string name="cd_pick_media">Pilih media</string>
     <string name="cd_pick_file">Pilih file</string>

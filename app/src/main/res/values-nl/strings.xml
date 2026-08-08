@@ -150,6 +150,7 @@
     <string name="cd_file">Bestand</string>
     <string name="cd_image">Afbeelding</string>
     <string name="cd_cancel">Annuleren</string>
+    <string name="cd_retry">Opnieuw verzenden</string>
     <string name="cd_link">Link</string>
     <string name="cd_pick_media">Media kiezen</string>
     <string name="cd_pick_file">Bestand kiezen</string>

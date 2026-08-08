@@ -203,6 +203,7 @@
   <string name="cd_file">קובץ</string>
   <string name="cd_image">תמונה</string>
   <string name="cd_cancel">בטל</string>
+  <string name="cd_retry">נסה לשלוח שוב</string>
   <string name="cd_link">קישור</string>
   <string name="cd_record_voice">הקלט הודעה קולית</string>
   <string name="cd_pick_media">בחר מדיה</string>

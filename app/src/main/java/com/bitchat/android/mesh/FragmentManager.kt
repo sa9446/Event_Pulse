@@ -14,8 +14,11 @@ import java.util.concurrent.ConcurrentHashMap
  * This implementation exactly matches iOS SimplifiedBluetoothService fragmentation:
  * - Same fragment payload structure (13-byte header + data)
  * - Same MTU thresholds and fragment sizes
- * - Same reassembly logic and timeout handling
+ * - Same reassembly logic and base timeout (small sets expire at 30s, like iOS)
  * - Uses new FragmentPayload model for type safety
+ *
+ * Divergence: large fragment sets get a size-scaled assembly window (fragmentTimeoutFor)
+ * so slow BLE links can finish multi-MB transfers; iOS peers still clean up at 30s.
  */
 class FragmentManager {
     
@@ -24,14 +27,17 @@ class FragmentManager {
         // iOS values: 512 MTU threshold, 469 max fragment size (512 MTU - headers)
         private const val FRAGMENT_SIZE_THRESHOLD = com.bitchat.android.util.AppConstants.Fragmentation.FRAGMENT_SIZE_THRESHOLD // Matches iOS: if data.count > 512
         private const val MAX_FRAGMENT_SIZE = com.bitchat.android.util.AppConstants.Fragmentation.MAX_FRAGMENT_SIZE        // Matches iOS: maxFragmentSize = 469 
-        private const val FRAGMENT_TIMEOUT = com.bitchat.android.util.AppConstants.Fragmentation.FRAGMENT_TIMEOUT_MS     // Matches iOS: 30 seconds cleanup
+        private const val FRAGMENT_TIMEOUT = com.bitchat.android.util.AppConstants.Fragmentation.FRAGMENT_TIMEOUT_MS     // Base window; iOS peers use 30 seconds
+        private const val FRAGMENT_TIMEOUT_PER_MB = com.bitchat.android.util.AppConstants.Fragmentation.FRAGMENT_TIMEOUT_PER_MB_MS
+        private const val FRAGMENT_TIMEOUT_MAX = com.bitchat.android.util.AppConstants.Fragmentation.FRAGMENT_TIMEOUT_MAX_MS
         private const val CLEANUP_INTERVAL = com.bitchat.android.util.AppConstants.Fragmentation.CLEANUP_INTERVAL_MS     // 10 seconds cleanup check
     }
     
     // Fragment storage - iOS equivalent: incomingFragments: [String: [Int: Data]]
     private val incomingFragments = ConcurrentHashMap<String, MutableMap<Int, ByteArray>>()
     // iOS equivalent: fragmentMetadata: [String: (type: UInt8, total: Int, timestamp: Date)]
-    private val fragmentMetadata = ConcurrentHashMap<String, Triple<UByte, Int, Long>>() // originalType, totalFragments, timestamp
+    // Third element is the per-set expiry deadline (creation + fragmentTimeoutFor(total)).
+    private val fragmentMetadata = ConcurrentHashMap<String, Triple<UByte, Int, Long>>() // originalType, totalFragments, deadline
     private val fragmentCumulativeSize = ConcurrentHashMap<String, Int>()
 
     private val fragmentStateLock = Any()
@@ -56,9 +62,11 @@ class FragmentManager {
         createFragments(packet, 0xFFFF)
 
     /**
-     * Create a fragment plan with a caller-selected bound. Private media uses
-     * 256 for cross-platform admission; generic/public traffic retains the
-     * UInt16 wire limit.
+     * Create a fragment plan with a caller-selected bound. Android callers (generic/public
+     * traffic and private media alike) use the shared MAX_FRAGMENTS_PER_ID admission bound;
+     * the unbounded overload retains the UInt16 wire limit. Upstream iOS peers still only
+     * reassemble 256 fragments — a peer-side limit this codebase cannot raise — so callers
+     * targeting an iOS receiver must pass a lower bound themselves.
      */
     fun createFragments(packet: BitchatPacket, maxFragments: Int): List<BitchatPacket> {
         try {
@@ -215,7 +223,9 @@ class FragmentManager {
                     fragmentMetadata[fragmentIDString] = Triple(
                         fragmentPayload.originalType,
                         fragmentPayload.total,
-                        System.currentTimeMillis()
+                        // Deadline (not creation time): small sets keep the base window while
+                        // larger declared sizes get a scaled window so slow BLE links can finish.
+                        System.currentTimeMillis() + fragmentTimeoutFor(fragmentPayload.total)
                     )
                     fragmentCumulativeSize[fragmentIDString] = 0
                 }
@@ -287,6 +297,16 @@ class FragmentManager {
         return null
     }
 
+    /**
+     * Receiver assembly window for a fragment set of [totalFragments]: the base 30s window,
+     * plus 2 minutes per declared megabyte, hard-capped. Kept internal for unit tests.
+     */
+    internal fun fragmentTimeoutFor(totalFragments: Int): Long {
+        val declaredBytes = totalFragments.toLong() * MAX_FRAGMENT_SIZE
+        val scaledMs = (declaredBytes / (1024L * 1024L)) * FRAGMENT_TIMEOUT_PER_MB
+        return (FRAGMENT_TIMEOUT + scaledMs).coerceAtMost(FRAGMENT_TIMEOUT_MAX)
+    }
+
     private fun removeFragmentSetLocked(fragmentIDString: String) {
         incomingFragments.remove(fragmentIDString)
         fragmentMetadata.remove(fragmentIDString)
@@ -311,18 +331,19 @@ class FragmentManager {
     }
     
     /**
-     * iOS cleanup - exactly matching performCleanup() implementation
-     * Clean old fragments (> 30 seconds old)
+     * Periodic cleanup: drop fragment sets whose per-set deadline has passed. Small sets keep
+     * the base 30s window (matching iOS); larger declared sizes get a scaled window so slow
+     * BLE links can finish multi-MB transfers.
      */
     private fun cleanupOldFragments() {
         synchronized(fragmentStateLock) {
             val now = System.currentTimeMillis()
-            val cutoff = now - FRAGMENT_TIMEOUT
 
-            // iOS: let oldFragments = fragmentMetadata.filter { $0.value.timestamp < cutoff }.map { $0.key }
-            val oldFragments = fragmentMetadata.filter { it.value.third < cutoff }.map { it.key }
+            // Each set carries its own deadline (creation time + fragmentTimeoutFor(total));
+            // drop only sets whose deadline has genuinely passed.
+            val expiredFragments = fragmentMetadata.filter { it.value.third < now }.map { it.key }
 
-            for (fragmentID in oldFragments) {
+            for (fragmentID in expiredFragments) {
                 removeFragmentSetLocked(fragmentID)
             }
         }
@@ -341,11 +362,11 @@ class FragmentManager {
                 appendLine("Global Buffered Bytes: $globalBufferedBytes")
 
                 fragmentMetadata.forEach { (fragmentID, metadata) ->
-                    val (originalType, totalFragments, timestamp) = metadata
+                    val (originalType, totalFragments, deadline) = metadata
                     val received = incomingFragments[fragmentID]?.size ?: 0
-                    val ageSeconds = (System.currentTimeMillis() - timestamp) / 1000
+                    val remainingSeconds = (deadline - System.currentTimeMillis()) / 1000
                     val bytes = fragmentCumulativeSize[fragmentID] ?: 0
-                    appendLine("  - $fragmentID: $received/$totalFragments fragments, bytes=$bytes, type: $originalType, age: ${ageSeconds}s")
+                    appendLine("  - $fragmentID: $received/$totalFragments fragments, bytes=$bytes, type: $originalType, expires in: ${remainingSeconds}s")
                 }
             }
         }

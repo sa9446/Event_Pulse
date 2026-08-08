@@ -345,6 +345,9 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 onCancelTransfer = { msg ->
                     viewModel.cancelMediaSend(msg.id)
                 },
+                onRetrySend = { msg ->
+                    viewModel.retryMediaSend(msg.id)
+                },
                 onImageClick = { currentPath, allImagePaths, initialIndex ->
                     viewerImagePaths = allImagePaths
                     initialViewerIndex = initialIndex
@@ -650,7 +653,17 @@ fun ChatInputSection(
     nickname: String,
     colorScheme: ColorScheme,
     showMediaButtons: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /**
+     * Longest-side bound for outgoing images. BLE-only private chats pass a smaller bound so
+     * the payload rides the slow radio faster and is less likely to fail mid-transfer.
+     */
+    maxImageDim: Int = com.bitchat.android.features.media.ImageUtils.DEFAULT_IMAGE_MAX_DIM,
+    /**
+     * JPEG quality for outgoing images. BLE-only private chats pass a lower quality so the
+     * payload shrinks further on the slow radio.
+     */
+    maxImageQuality: Int = com.bitchat.android.features.media.ImageUtils.DEFAULT_IMAGE_QUALITY
 ) {
     Column(
         // Flat, slightly translucent screen background — the same treatment as the top bar, so the
@@ -728,6 +741,8 @@ fun ChatInputSection(
             nickname = nickname,
             showMediaButtons = showMediaButtons,
             mentionPeerIdentities = mentionPeerIdentities,
+            maxImageDim = maxImageDim,
+            maxImageQuality = maxImageQuality,
             modifier = Modifier.fillMaxWidth()
         )
     }

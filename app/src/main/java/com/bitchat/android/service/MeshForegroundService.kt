@@ -37,6 +37,9 @@ class MeshForegroundService : Service() {
         const val ACTION_UPDATE_NOTIFICATION = "com.bitchat.android.service.UPDATE_NOTIFICATION"
 
         fun start(context: Context) {
+            // Ensure preferences are available before any accessor runs (service can be
+            // started by the UI before Application deferred-init finishes).
+            MeshServicePreferences.init(context.applicationContext)
             val intent = Intent(context, MeshForegroundService::class.java).apply { action = ACTION_START }
 
             // Only launch as an FGS when onStartCommand can promote immediately.
@@ -100,6 +103,9 @@ class MeshForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // Self-initialize prefs in case the service was recreated by the system
+        // (START_STICKY restart) without going through start().
+        MeshServicePreferences.init(applicationContext)
         notificationManager = NotificationManagerCompat.from(this)
         peerAvailabilityNotifier = PeerAvailabilityNotifier(applicationContext)
         createChannel()

@@ -92,6 +92,8 @@ public final class Noise {
 			return new Curve448DHState();
 		if (name.equals("NewHope"))
 			return new NewHopeDHState();
+		if (name.equals("MLKEM768"))
+			return new MLKEMDHState();
 		throw new NoSuchAlgorithmException("Unknown Noise DH algorithm name: " + name);
 	}
 

@@ -482,6 +482,8 @@ fun AboutSheet(
                         val powEnabled by PoWPreferenceManager.powEnabled.collectAsState()
                         val powDifficulty by PoWPreferenceManager.powDifficulty.collectAsState()
                         var backgroundEnabled by remember { mutableStateOf(com.bitchat.android.service.MeshServicePreferences.isBackgroundEnabled(true)) }
+                        var postQuantumEnabled by remember { mutableStateOf(com.bitchat.android.service.MeshServicePreferences.isPostQuantumEnabled(true)) }
+                        var blockClassicEnabled by remember { mutableStateOf(com.bitchat.android.service.MeshServicePreferences.isClassicHandshakeBlocked(true)) }
                         val torMode = remember { mutableStateOf(TorPreferenceManager.get(context)) }
                         val torProvider = remember { ArtiTorManager.getInstance() }
                         val torStatus by torProvider.statusFlow.collectAsState()
@@ -511,6 +513,44 @@ fun AboutSheet(
                                             } else {
                                                 com.bitchat.android.service.MeshForegroundService.start(context)
                                             }
+                                        }
+                                    )
+
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(start = 54.dp),
+                                        thickness = 1.dp,
+                                        color = colorScheme.outlineVariant
+                                    )
+
+                                    // Post-Quantum Encryption Toggle
+                                    SettingsToggleRow(
+                                        icon = Icons.Filled.Lock,
+                                        title = stringResource(R.string.about_post_quantum_title),
+                                        subtitle = stringResource(R.string.about_post_quantum_desc),
+                                        checked = postQuantumEnabled,
+                                        onCheckedChange = { enabled ->
+                                            postQuantumEnabled = enabled
+                                            com.bitchat.android.service.MeshServicePreferences.setPostQuantumEnabled(enabled)
+                                        }
+                                    )
+
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(start = 54.dp),
+                                        thickness = 1.dp,
+                                        color = colorScheme.outlineVariant
+                                    )
+
+                                    // Block Non-Quantum Sessions Toggle (meaningful only while
+                                    // post-quantum is on; disabled otherwise)
+                                    SettingsToggleRow(
+                                        icon = Icons.Filled.Warning,
+                                        title = stringResource(R.string.about_block_classic_title),
+                                        subtitle = stringResource(R.string.about_block_classic_desc),
+                                        checked = blockClassicEnabled,
+                                        enabled = postQuantumEnabled,
+                                        onCheckedChange = { enabled ->
+                                            blockClassicEnabled = enabled
+                                            com.bitchat.android.service.MeshServicePreferences.setClassicHandshakeBlocked(enabled)
                                         }
                                     )
 

@@ -19,7 +19,19 @@ import java.util.Locale
  * The resulting file has MIME audio/mp4.
  */
 class VoiceRecorder(private val context: Context) {
-    companion object { private const val TAG = "VoiceRecorder" }
+    companion object {
+        private const val TAG = "VoiceRecorder"
+
+        /** Standard-tier AAC bitrate (16 kHz mono, speech-optimized). */
+        const val DEFAULT_VOICE_BITRATE = 20_000
+
+        /**
+         * BLE-only tier: a lower bitrate keeps speech intelligible while shrinking the payload
+         * (~40% smaller than the default tier) so it rides the slow BLE radio faster and is far
+         * less likely to fail mid-transfer. Applied at send time via [VoiceTranscoder].
+         */
+        const val BLE_ONLY_VOICE_BITRATE = 12_000
+    }
 
     private var recorder: MediaRecorder? = null
     private val _amplitude = MutableStateFlow(0)
@@ -41,7 +53,7 @@ class VoiceRecorder(private val context: Context) {
             // Target: 16 kHz AAC @ 20 kbps ≈ 2.5 KB/sec
             // Lower sample rate and bitrate for compact, speech-optimized recordings
             rec.setAudioSamplingRate(16000)
-            rec.setAudioEncodingBitRate(20_000)
+            rec.setAudioEncodingBitRate(DEFAULT_VOICE_BITRATE)
             rec.setOutputFile(file.absolutePath)
             rec.prepare()
             rec.start() 

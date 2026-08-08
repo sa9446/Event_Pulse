@@ -2,6 +2,7 @@ package com.bitchat.android.ui.media
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -34,6 +35,7 @@ fun AudioMessageItem(
     onNicknameClick: ((String) -> Unit)?,
     onMessageLongPress: ((BitchatMessage) -> Unit)?,
     onCancelTransfer: ((BitchatMessage) -> Unit)?,
+    onRetrySend: ((BitchatMessage) -> Unit)? = null,
     modifier: Modifier = Modifier,
     showSender: Boolean = true
 ) {
@@ -94,6 +96,27 @@ fun AudioMessageItem(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(imageVector = Icons.Filled.Close, contentDescription = stringResource(R.string.cd_cancel), tint = Color.White, modifier = Modifier.size(16.dp))
+                }
+            }
+
+            // One-tap retry button on a failed send
+            val showRetry = message.sender == currentUserNickname &&
+                (message.deliveryStatus is com.bitchat.android.model.DeliveryStatus.Failed)
+            if (showRetry) {
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .background(androidx.compose.ui.graphics.Color(0xFFE53935).copy(alpha = 0.9f), CircleShape)
+                        .clickable { onRetrySend?.invoke(message) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = stringResource(R.string.cd_retry),
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
             }
         }

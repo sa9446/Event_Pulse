@@ -87,6 +87,7 @@ val sharedSourceIncludes = listOf(
     "com/bitchat/android/services/VerificationService.kt",
     "com/bitchat/android/services/meshgraph/**",
     "com/bitchat/android/service/TransportBridgeService.kt",
+    "com/bitchat/android/service/MeshServicePreferences.kt",
     "com/bitchat/android/nostr/Bech32.kt",
     "com/bitchat/android/nostr/GeohashAliasRegistry.kt",
     "com/bitchat/android/features/file/FileUtils.kt",
@@ -136,6 +137,10 @@ val syncSharedAppTests = tasks.register<Sync>("syncSharedAppTests") {
             "com/bitchat/android/mesh/**",
             "com/bitchat/FileTransferTest.kt",
         )
+        // Tests the transport-selection probe isPeerBleOnly exercise UnifiedMeshService,
+        // WifiAwareController, and WifiDirectController — all phone-only classes that the wear
+        // module deliberately excludes. The app's own unit tests cover it.
+        exclude("**/UnifiedMeshServiceIsPeerBleOnlyTest.kt")
     }
     into(layout.buildDirectory.dir("sharedTestSrc"))
 }

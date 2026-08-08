@@ -38,6 +38,13 @@ class SecureIdentityStateManager {
         private const val KEY_PRIVATE_MEDIA_CAPABILITY_PINS = "private_media_capability_pins_v1"
         private const val KEY_AUTHENTICATED_PEER_STATES = "authenticated_peer_states_v1"
 
+        // Keystore-wrapped private-key storage: values prefixed with KEY_ENVELOPE_PREFIX are
+        // AES-GCM envelopes encrypted by a non-exportable Android Keystore key (StrongBox-preferred)
+        // rather than raw Base64. Public keys stay plain (they are public).
+        private const val KEY_ENVELOPE_PREFIX = IdentityKeystoreCipher.ENVELOPE_PREFIX
+        private const val AAD_STATIC_PRIVATE = "static_private"
+        private const val AAD_SIGNING_PRIVATE = "signing_private"
+
         // BLE, Wi-Fi Aware, and Noise services each hold their own manager
         // instance over the same encrypted preferences. Serialize pin updates
         // process-wide so concurrent promotions cannot lose one another or
@@ -48,12 +55,15 @@ class SecureIdentityStateManager {
     
     private val prefs: SharedPreferences
     private val lock = Any()
+    private val keyCipher: IdentityKeystoreCipher?
     private var privateMediaPinsEpochAtCreation: Long
 
     constructor(context: Context) {
         privateMediaPinsEpochAtCreation = synchronized(privateMediaPinsLock) {
             privateMediaPinsEpoch
         }
+        // Hardware-backed Keystore envelope for the Noise/Ed25519 private keys (StrongBox-preferred).
+        keyCipher = AndroidIdentityKeystoreCipher()
         // Create master key for encryption
         val masterKey = MasterKey.Builder(context, MasterKey.DEFAULT_MASTER_KEY_ALIAS)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
@@ -70,12 +80,17 @@ class SecureIdentityStateManager {
     }
 
     /** Test-only storage injection; production always uses encrypted prefs. */
-    internal constructor(prefs: SharedPreferences, testOnly: Boolean) {
+    internal constructor(
+        prefs: SharedPreferences,
+        testOnly: Boolean,
+        keyCipher: IdentityKeystoreCipher? = null
+    ) {
         require(testOnly) { "Plain SharedPreferences are test-only" }
         privateMediaPinsEpochAtCreation = synchronized(privateMediaPinsLock) {
             privateMediaPinsEpoch
         }
         this.prefs = prefs
+        this.keyCipher = keyCipher
     }
     
     // MARK: - Static Key Management
@@ -90,11 +105,21 @@ class SecureIdentityStateManager {
             val publicKeyString = prefs.getString(KEY_STATIC_PUBLIC_KEY, null)
             
             if (privateKeyString != null && publicKeyString != null) {
-                val privateKey = android.util.Base64.decode(privateKeyString, android.util.Base64.DEFAULT)
+                val privateKey = decodeKeyMaterial(privateKeyString, AAD_STATIC_PRIVATE)
                 val publicKey = android.util.Base64.decode(publicKeyString, android.util.Base64.DEFAULT)
                 
                 // Validate key sizes
-                if (privateKey.size == 32 && publicKey.size == 32) {
+                if (privateKey?.size == 32 && publicKey.size == 32) {
+                    // In-place migration: legacy plain-Base64 private keys are re-wrapped with the
+                    // Keystore envelope so at-rest material is hardware-protected going forward.
+                    if (keyCipher != null && !privateKeyString.startsWith(KEY_ENVELOPE_PREFIX)) {
+                        prefs.edit()
+                            .putString(
+                                KEY_STATIC_PRIVATE_KEY,
+                                encodeKeyMaterial(privateKey, AAD_STATIC_PRIVATE)
+                            )
+                            .apply()
+                    }
                     Log.d(TAG, "Loaded static identity key from secure storage")
                     Pair(privateKey, publicKey)
                 } else {
@@ -121,7 +146,7 @@ class SecureIdentityStateManager {
                 throw IllegalArgumentException("Invalid key sizes: private=${privateKey.size}, public=${publicKey.size}")
             }
             
-            val privateKeyString = android.util.Base64.encodeToString(privateKey, android.util.Base64.DEFAULT)
+            val privateKeyString = encodeKeyMaterial(privateKey, AAD_STATIC_PRIVATE)
             val publicKeyString = android.util.Base64.encodeToString(publicKey, android.util.Base64.DEFAULT)
             
             prefs.edit()
@@ -148,11 +173,21 @@ class SecureIdentityStateManager {
             val publicKeyString = prefs.getString(KEY_SIGNING_PUBLIC_KEY, null)
             
             if (privateKeyString != null && publicKeyString != null) {
-                val privateKey = android.util.Base64.decode(privateKeyString, android.util.Base64.DEFAULT)
+                val privateKey = decodeKeyMaterial(privateKeyString, AAD_SIGNING_PRIVATE)
                 val publicKey = android.util.Base64.decode(publicKeyString, android.util.Base64.DEFAULT)
                 
                 // Validate key sizes
-                if (privateKey.size == 32 && publicKey.size == 32) {
+                if (privateKey?.size == 32 && publicKey.size == 32) {
+                    // In-place migration: legacy plain-Base64 private keys are re-wrapped with the
+                    // Keystore envelope so at-rest material is hardware-protected going forward.
+                    if (keyCipher != null && !privateKeyString.startsWith(KEY_ENVELOPE_PREFIX)) {
+                        prefs.edit()
+                            .putString(
+                                KEY_SIGNING_PRIVATE_KEY,
+                                encodeKeyMaterial(privateKey, AAD_SIGNING_PRIVATE)
+                            )
+                            .apply()
+                    }
                     Log.d(TAG, "Loaded Ed25519 signing key from secure storage")
                     Pair(privateKey, publicKey)
                 } else {
@@ -179,7 +214,7 @@ class SecureIdentityStateManager {
                 throw IllegalArgumentException("Invalid signing key sizes: private=${privateKey.size}, public=${publicKey.size}")
             }
             
-            val privateKeyString = android.util.Base64.encodeToString(privateKey, android.util.Base64.DEFAULT)
+            val privateKeyString = encodeKeyMaterial(privateKey, AAD_SIGNING_PRIVATE)
             val publicKeyString = android.util.Base64.encodeToString(publicKey, android.util.Base64.DEFAULT)
             
             prefs.edit()
@@ -395,6 +430,53 @@ class SecureIdentityStateManager {
     // Android now derives peer ID from the persisted Noise identity fingerprint.
     // No timed peer ID rotation is performed here.
     
+    // MARK: - Keystore-Wrapped Key Material
+
+    /**
+     * Encode raw private key bytes for storage. When the hardware Keystore is available the key is
+     * wrapped in an AES-256-GCM envelope encrypted with a non-exportable Keystore key, so a rooted
+     * device cannot extract the raw material from preferences. Falls back to plain Base64 inside
+     * EncryptedSharedPreferences when Keystore is unavailable.
+     */
+    private fun encodeKeyMaterial(raw: ByteArray, associatedData: String): String {
+        val cipher = keyCipher ?: return android.util.Base64.encodeToString(raw, android.util.Base64.DEFAULT)
+        return try {
+            KEY_ENVELOPE_PREFIX + android.util.Base64.encodeToString(
+                cipher.encrypt(raw, associatedData.toByteArray(Charsets.UTF_8)),
+                android.util.Base64.NO_WRAP
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Keystore wrap failed (${e.message}); storing legacy format")
+            android.util.Base64.encodeToString(raw, android.util.Base64.DEFAULT)
+        }
+    }
+
+    /**
+     * Decode raw private key bytes from storage, unwrapping the Keystore envelope when present.
+     * Returns null when the value cannot be read (corrupt, or the Keystore key was erased).
+     */
+    private fun decodeKeyMaterial(stored: String, associatedData: String): ByteArray? {
+        if (stored.startsWith(KEY_ENVELOPE_PREFIX)) {
+            val cipher = keyCipher ?: return null
+            return try {
+                val envelope = android.util.Base64.decode(
+                    stored.removePrefix(KEY_ENVELOPE_PREFIX),
+                    android.util.Base64.NO_WRAP
+                )
+                cipher.decrypt(envelope, associatedData.toByteArray(Charsets.UTF_8))
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to unwrap $associatedData: ${e.message}")
+                null
+            }
+        }
+        return try {
+            android.util.Base64.decode(stored, android.util.Base64.DEFAULT)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to decode legacy $associatedData: ${e.message}")
+            null
+        }
+    }
+
     // MARK: - Identity Validation
     
     /**
@@ -474,6 +556,13 @@ class SecureIdentityStateManager {
                 if (!prefs.edit().clear().commit()) {
                     Log.e(TAG, "Identity preference wipe could not be committed")
                 }
+            }
+            // Cryptographic erasure: destroy the Keystore wrapping key so any residual ciphertext
+            // on disk can never be decrypted again, even by this app.
+            try {
+                keyCipher?.destroyKey()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to destroy identity Keystore key: ${e.message}")
             }
             Log.w(TAG, "All identity data cleared")
         } catch (e: Exception) {

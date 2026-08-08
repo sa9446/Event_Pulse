@@ -186,6 +186,7 @@
     <string name="cd_file">Файл</string>
     <string name="cd_image">Зображення</string>
     <string name="cd_cancel">Скасувати</string>
+    <string name="cd_retry">Повторити надсилання</string>
     <string name="cd_link">Посилання</string>
     <string name="cd_record_voice">Записати голосове повідомлення</string>
     <string name="cd_pick_media">Вибрати медіа</string>

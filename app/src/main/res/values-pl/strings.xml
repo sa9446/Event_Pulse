@@ -201,6 +201,7 @@
     <string name="cd_file">Plik</string>
     <string name="cd_image">Obraz</string>
     <string name="cd_cancel">Anuluj</string>
+    <string name="cd_retry">Wyślij ponownie</string>
     <string name="cd_link">Link</string>
     <string name="cd_record_voice">Nagraj notatkę głosową</string>
     <string name="cd_pick_media">Wybierz multimedia</string>

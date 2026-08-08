@@ -95,23 +95,6 @@ A 3-5 minute demo showing the key features of Dead Air running on two Android de
 
 ---
 
-## Scene 6: Emergency SOS (3:00 – 3:30)
-
-**Visual:** Red SOS button → pulsing alert banner on all devices
-
-**Narration:**
-> "In an emergency, the SOS button broadcasts a priority alert that bypasses all filters and shows a pulsing red banner on every connected device."
-
-**Actions:**
-1. Tap SOS button on device 1
-2. Device 2 shows red pulsing banner: "🚨 EMERGENCY from [Sender]"
-3. Dismiss the alert with the X button
-4. SOS banners have a 60-second dedup window to prevent spam
-
-**Text overlay:** *"Priority emergency broadcast"*
-
----
-
 ## Scene 7: Performance (3:30 – 4:00)
 
 **Visual:** Split screen or side-by-side showing fast operations
@@ -133,14 +116,13 @@ A 3-5 minute demo showing the key features of Dead Air running on two Android de
 **Visual:** Architecture diagram or feature grid
 
 **Narration:**
-> "Dead Air combines battle-tested BLE mesh infrastructure with new features for venues — structured channels, media sharing, retraction, SOS, and real-time crowd sensing. All offline, all peer-to-peer, all private."
+> "Dead Air combines battle-tested BLE mesh infrastructure with new features for venues — structured channels, media sharing, retraction, and real-time crowd sensing. All offline, all peer-to-peer, all private."
 
 **Text overlay cards:**
 - 🏟️ Venue Crowd Pulse
 - 💬 Channel Chat
 - 📸 Media Sharing
 - 🔙 Mesh Recall
-- 🚨 Emergency SOS
 - 🔒 End-to-End Encrypted
 
 ---
@@ -186,12 +168,10 @@ phone 1 screen, **C** = close-up of phone 2 screen, **D** = screen recording ove
 | 11 | Voice note | 2:15–2:30 | D | Hold mic → record → release → waveform on both | "Voice notes record at low bitrate and stream as a waveform." | — |
 | 12 | Mesh Recall | 2:30–2:50 | B | Long-press own message → Retract for Everyone | "Sent something by accident? Dead Air's Mesh Recall lets you retract messages — even media." | *Mesh-wide retraction* |
 | 13 | Retract lands | 2:50–3:00 | C | Message disappears on phone 2 + retracted badge | "…across every connected device in the venue." | *This message was retracted by sender* |
-| 14 | SOS | 3:00–3:15 | B | Tap red SOS button | "In an emergency, the SOS button broadcasts a priority alert that bypasses all filters." | *Priority emergency broadcast* |
-| 15 | SOS lands | 3:15–3:30 | C | Pulsing red banner on phone 2 → dismiss | "…showing a pulsing red banner on every connected device. SOS has a 60-second dedup window." | *🚨 EMERGENCY from Alice* |
-| 16 | Speed | 3:30–3:50 | B | Rapid-fire 3–4 messages; then camera → photo → arrives | "Built for speed — parallel chunked transfer, bitmap caching, and AOT compilation." | *Parallel mesh = 4x faster media* |
-| 17 | Architecture | 3:50–4:15 | A | Split screen or feature-grid card | "Channels, media, retraction, SOS, crowd sensing — all offline, all peer-to-peer." | 6 feature chips |
-| 18 | Open source | 4:15–4:30 | A | GitHub repo QR / URL on end card | "Dead Air is open source and built for hackathons. Fork it, make it your own." | *github.com/sa9446/Event_Pulse* |
-| 19 | Outro | 4:30–4:40 | A | Logo, tagline, socials | "Dead Air — the venue that runs on nothing but the crowd." | *Dead Air* |
+| 14 | Speed | 3:30–3:50 | B | Rapid-fire 3–4 messages; then camera → photo → arrives | "Built for speed — parallel chunked transfer, bitmap caching, and AOT compilation." | *Parallel mesh = 4x faster media* |
+| 15 | Architecture | 3:50–4:15 | A | Split screen or feature-grid card | "Channels, media, retraction, crowd sensing — all offline, all peer-to-peer." | 6 feature chips |
+| 16 | Open source | 4:15–4:30 | A | GitHub repo QR / URL on end card | "Dead Air is open source and built for hackathons. Fork it, make it your own." | *github.com/sa9446/Event_Pulse* |
+| 17 | Outro | 4:30–4:40 | A | Logo, tagline, socials | "Dead Air — the venue that runs on nothing but the crowd." | *Dead Air* |
 
 ### Filming order (fastest retake loop)
 

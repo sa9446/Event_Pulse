@@ -131,6 +131,12 @@ class BluetoothMeshService(private val context: Context) : TransportBridgeServic
     init {
         Log.i(TAG, "Initializing BluetoothMeshService for peer=$myPeerID")
         VerificationService.configure(encryptionService)
+        // Deliver the one-shot classic-X25519 fallback retry (emitted after a post-quantum
+        // handshake times out toward a classic-only responder) as a normal handshake message.
+        encryptionService.onClassicFallbackMessage = { peerID, handshakeData ->
+            Log.i(TAG, "Sending classic X25519 handshake fallback to ${peerID.take(8)}")
+            sendNoiseHandshakePacket(peerID, handshakeData)
+        }
         setupDelegates()
         messageHandler.packetProcessor = packetProcessor
         //startPeriodicDebugLogging()
@@ -433,19 +439,7 @@ class BluetoothMeshService(private val context: Context) : TransportBridgeServic
                     val handshakeData = encryptionService.initiateHandshake(peerID)
 
                     if (handshakeData != null) {
-                        val packet = BitchatPacket(
-                            version = 1u,
-                            type = MessageType.NOISE_HANDSHAKE.value,
-                            senderID = hexStringToByteArray(myPeerID),
-                            recipientID = hexStringToByteArray(peerID),
-                            timestamp = System.currentTimeMillis().toULong(),
-                            payload = handshakeData,
-                            ttl = MAX_TTL
-                        )
-
-                        // Sign the handshake packet before broadcasting
-                        val signedPacket = signPacketBeforeBroadcast(packet)
-                        broadcastRoutedPacket(RoutedPacket(signedPacket))
+                        sendNoiseHandshakePacket(peerID, handshakeData)
                     } else {
                         Log.w(TAG, "Failed to generate Noise handshake data for $peerID")
                     }
@@ -1330,6 +1324,25 @@ class BluetoothMeshService(private val context: Context) : TransportBridgeServic
     }
 
     /**
+     * Send a Noise handshake message-1/response payload to a specific peer as a signed
+     * NOISE_HANDSHAKE packet. Used for normal initiations and the one-shot classic fallback that
+     * the encryption service emits after a post-quantum handshake times out.
+     */
+    private fun sendNoiseHandshakePacket(peerID: String, handshakeData: ByteArray) {
+        val packet = BitchatPacket(
+            version = 1u,
+            type = MessageType.NOISE_HANDSHAKE.value,
+            senderID = hexStringToByteArray(myPeerID),
+            recipientID = hexStringToByteArray(peerID),
+            timestamp = System.currentTimeMillis().toULong(),
+            payload = handshakeData,
+            ttl = MAX_TTL
+        )
+        val signedPacket = signPacketBeforeBroadcast(packet)
+        broadcastRoutedPacket(RoutedPacket(signedPacket))
+    }
+
+    /**
      * Send leave announcement
      */
     private fun sendLeaveAnnouncement() {
@@ -1367,6 +1380,14 @@ class BluetoothMeshService(private val context: Context) : TransportBridgeServic
      */
     fun getSessionState(peerID: String): com.bitchat.android.noise.NoiseSession.NoiseSessionState {
         return encryptionService.getSessionState(peerID)
+    }
+
+    /**
+     * Whether the established session with this peer used the hybrid ML-KEM (post-quantum)
+     * protocol rather than the classic X25519 fallback.
+     */
+    fun isSessionPostQuantum(peerID: String): Boolean {
+        return encryptionService.isSessionPostQuantum(peerID)
     }
     
     /**

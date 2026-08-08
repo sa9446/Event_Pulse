@@ -59,8 +59,6 @@ adb -s <deviceB-serial> install -r app/build/outputs/apk/release/app-universal-r
 | 5 | Camera → take photo | A | WebP-compressed thumbnail appears on B in a few seconds (chunked BLE transfer) |
 | 6 | Hold-to-record voice note | B | Voice note with waveform appears on A; tap to play |
 | 7 | Long-press Alice's own message → **Retract for Everyone** | A | Message disappears on BOTH devices; "retracted by sender" badge; media purged |
-| 8 | Tap **SOS** | A | Red pulsing alert banner on BOTH devices (bypasses channels) |
-| 9 | Dismiss banner | B | Banner clears; SOS has a 60s dedup window |
 
 ## 4. Troubleshooting
 
@@ -69,7 +67,6 @@ adb -s <deviceB-serial> install -r app/build/outputs/apk/release/app-universal-r
 | Peer count stays 0 | Location/BLE permission missing, or phones too far apart | Grant Nearby devices + Location; move within 5–10 m |
 | Messages don't cross | One phone's BLE is off, or background scan throttled | Keep both apps **in the foreground**; toggle Bluetooth off/on |
 | Photo arrives slowly / never | BLE MTU + chunking is slow for large files | Stay within 5 m; keep phones still; retry once |
-| SOS banner doesn't show | Rate-limited (60s dedup) | Wait 60s, or use a different device |
 | App shows "untrusted publisher" on update | Cert pin mismatch | Ensure release APK signed with the key pinned in `gradle.properties` (CI keystore for CI-published builds) |
 | Mic/camera button greyed out | Permission denied | Grant Camera + Microphone in app settings; re-launch app |
 

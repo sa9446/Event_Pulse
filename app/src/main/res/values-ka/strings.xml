@@ -150,6 +150,7 @@
     <string name="cd_file">ფაილი</string>
     <string name="cd_image">სურათი</string>
     <string name="cd_cancel">გაუქმება</string>
+    <string name="cd_retry">ხელახლა გაგზავნა</string>
     <string name="cd_link">ბმული</string>
     <string name="cd_pick_media">მედიის არჩევა</string>
     <string name="cd_pick_file">ფაილის არჩევა</string>

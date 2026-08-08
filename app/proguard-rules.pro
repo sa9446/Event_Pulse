@@ -33,6 +33,22 @@
 -keep class * implements com.google.gson.JsonSerializer
 -keep class * implements com.google.gson.JsonDeserializer
 
+# ML Kit (QR/barcode scanning) — R8 Full Mode (AGP 9) strips internal classes that
+# are accessed reflectively at runtime, causing an NPE inside BarcodeScanning.getClient()
+# ("Attempt to read from field 'zzg zzg.a' on a null object reference").
+-keep class com.google.mlkit.** { *; }
+-keep class com.google.android.gms.internal.mlkit_vision_barcode_bundled.** { *; }
+-dontwarn com.google.mlkit.**
+
+# Bouncy Castle ML-KEM (FIPS 203) — instantiated by the hybrid Noise handshake through the
+# southernstorm DHStateHybrid bridge. Referenced directly, but keep the exact classes to be
+# safe against multi-release-jar surprises in R8 Full Mode.
+-keep class org.bouncycastle.crypto.params.MLKEM** { *; }
+-keep class org.bouncycastle.crypto.generators.MLKEMKeyPairGenerator { *; }
+-keep class org.bouncycastle.crypto.kems.MLKEMGenerator { *; }
+-keep class org.bouncycastle.crypto.kems.MLKEMExtractor { *; }
+-keep class org.bouncycastle.crypto.SecretWithEncapsulation { *; }
+
 # ── Optimization Flags ──────────────────────────────────────
 
 # Allow R8 to merge classes aggressively

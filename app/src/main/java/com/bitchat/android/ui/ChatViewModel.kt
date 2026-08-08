@@ -380,6 +380,7 @@ class ChatViewModel(
     val favoritePeers: StateFlow<Set<String>> = state.favoritePeers
     val peerFavoritedUs: StateFlow<Set<String>> = state.peerFavoritedUs
     val peerSessionStates: StateFlow<Map<String, String>> = state.peerSessionStates
+    val peerPostQuantum: StateFlow<Map<String, Boolean>> = state.peerPostQuantum
     val peerFingerprints: StateFlow<Map<String, String>> = state.peerFingerprints
     val peerNicknames: StateFlow<Map<String, String>> = state.peerNicknames
     val peerRSSI: StateFlow<Map<String, Int>> = state.peerRSSI
@@ -557,6 +558,21 @@ class ChatViewModel(
         // Delegate to MediaSendingManager which tracks transfer IDs and cleans up UI state
         mediaSendingManager.cancelMediaSend(messageId)
     }
+
+    /**
+     * One-tap retry for a failed media message: re-sends the original file into the same
+     * conversation, reusing the failed bubble (no duplicate message).
+     */
+    fun retryMediaSend(messageId: String) {
+        mediaSendingManager.retryMediaSend(messageId)
+    }
+
+    /**
+     * True when [peerID] is currently reachable only over BLE (no Wi-Fi Aware/Direct link),
+     * used by the composer to compress images more aggressively for slow BLE-only transfers.
+     */
+    fun isPeerBleOnly(peerID: String): Boolean =
+        try { mesh.isPeerBleOnly(peerID) } catch (_: Exception) { false }
     
     private fun loadAndInitialize() {
         // Load nickname
@@ -1202,6 +1218,13 @@ class ChatViewModel(
             sessionStateForPeer(peerID).toString()
         }
         state.setPeerSessionStates(sessionStates)
+        // Track which peers negotiated the hybrid ML-KEM (post-quantum) protocol so the UI can
+        // badge those sessions.
+        state.setPeerPostQuantum(
+            currentPeers.associateWith { pid ->
+                runCatching { mesh.isSessionPostQuantum(pid) }.getOrDefault(false)
+            }
+        )
         // Detect new established sessions and flush router outbox for them and their noiseHex aliases
         sessionStates.forEach { (peerID, newState) ->
             val old = prevStates[peerID]
@@ -1242,7 +1265,9 @@ class ChatViewModel(
             state.setPeerDirect(directMap)
         } catch (_: Exception) { }
 
-        // Flush any pending QR verification once a Noise session is established
+        // Promote QR scans that were accepted before the peer was discovered, then flush any
+        // pending QR verification once a Noise session is established.
+        verificationHandler.flushPendingVerifications(currentPeers)
         currentPeers.forEach { peerID ->
             if (sessionStateForPeer(peerID) is NoiseSession.NoiseSessionState.Established) {
                 verificationHandler.sendPendingVerificationIfNeeded(peerID)

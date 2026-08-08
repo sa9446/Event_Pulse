@@ -126,6 +126,13 @@ class MeshCore(
         peerManager.isPeerDirectlyConnected = { peerID -> directPeers.contains(peerID) }
         setupDelegates()
 
+        // Deliver the one-shot classic-X25519 fallback retry (emitted after a post-quantum
+        // handshake times out toward a classic-only responder) as a normal handshake message.
+        encryptionService.onClassicFallbackMessage = { peerID, handshakeData ->
+            Log.i("MeshCore", "Sending classic X25519 handshake fallback to ${peerID.take(8)}")
+            sendNoiseHandshakePacket(peerID, handshakeData)
+        }
+
         if (sharedGossipManager == null) {
             gossipSyncManager.delegate = object : GossipSyncManager.Delegate {
                 override fun sendPacket(packet: BitchatPacket) {
@@ -910,25 +917,38 @@ class MeshCore(
         return encryptionService.getSessionState(peerID)
     }
 
+    fun isSessionPostQuantum(peerID: String): Boolean {
+        return encryptionService.isSessionPostQuantum(peerID)
+    }
+
     fun initiateNoiseHandshake(peerID: String) {
         scope.launch {
             try {
                 val handshakeData = encryptionService.initiateHandshake(peerID) ?: return@launch
-                val packet = BitchatPacket(
-                    version = 1u,
-                    type = MessageType.NOISE_HANDSHAKE.value,
-                    senderID = MeshPacketUtils.hexStringToByteArray(myPeerID),
-                    recipientID = MeshPacketUtils.hexStringToByteArray(peerID),
-                    timestamp = System.currentTimeMillis().toULong(),
-                    payload = handshakeData,
-                    ttl = maxTtl
-                )
-                val signedPacket = signPacketBeforeBroadcast(packet)
-                dispatchGlobal(RoutedPacket(signedPacket))
+                sendNoiseHandshakePacket(peerID, handshakeData)
             } catch (e: Exception) {
                 Log.e("MeshCore", "Failed to initiate Noise handshake with $peerID: ${e.message}")
             }
         }
+    }
+
+    /**
+     * Send a Noise handshake message-1/response payload to a specific peer as a signed
+     * NOISE_HANDSHAKE packet. Also used for the one-shot classic fallback that the encryption
+     * service emits after a post-quantum handshake times out toward a classic-only responder.
+     */
+    private fun sendNoiseHandshakePacket(peerID: String, handshakeData: ByteArray) {
+        val packet = BitchatPacket(
+            version = 1u,
+            type = MessageType.NOISE_HANDSHAKE.value,
+            senderID = MeshPacketUtils.hexStringToByteArray(myPeerID),
+            recipientID = MeshPacketUtils.hexStringToByteArray(peerID),
+            timestamp = System.currentTimeMillis().toULong(),
+            payload = handshakeData,
+            ttl = maxTtl
+        )
+        val signedPacket = signPacketBeforeBroadcast(packet)
+        dispatchGlobal(RoutedPacket(signedPacket))
     }
 
     fun getPeerFingerprint(peerID: String): String? = peerManager.getFingerprintForPeer(peerID)

@@ -47,7 +47,20 @@ data class NoiseDecryptionResult(
 class NoiseSessionManager(
     private val localStaticPrivateKey: ByteArray,
     private val localStaticPublicKey: ByteArray,
-    private val localPeerID: String
+    private val localPeerID: String,
+    /**
+     * Returns whether new outbound handshakes should use the hybrid post-quantum protocol
+     * (Noise_XXhfs_25519+MLKEM768). Read fresh per session so the About-sheet toggle applies to
+     * the next handshake without a restart.
+     */
+    private val postQuantumProvider: () -> Boolean = { true },
+    /**
+     * When true (and [postQuantumProvider] is also true), classic X25519-only handshakes are
+     * refused outright: the initiator never downgrades to classic on timeout and the responder
+     * drops classic message 1s. This guarantees every negotiated session is post-quantum, at the
+     * cost of losing connectivity with legacy classic-only builds. Read fresh per session.
+     */
+    private val blockClassicProvider: () -> Boolean = { false }
 ) {
     
     companion object {
@@ -56,12 +69,28 @@ class NoiseSessionManager(
         private const val HANDSHAKE_SWEEP_INTERVAL_MS = 2_000L
         private const val HANDSHAKE_MESSAGE_1_SIZE = 32
         private const val SESSION_TOKEN_SIZE = 32
+
+        // Classic XX handshake message 1 is just the ephemeral key (32 bytes). The hybrid
+        // XXhfs handshake message 1 appends the ML-KEM-768 encapsulation key (+1184 bytes).
+        // A responder can therefore tell which protocol the initiator used purely from the
+        // first message's size, which is what enables automatic mixed-fleet negotiation.
+        private const val POST_QUANTUM_MESSAGE_1_SIZE =
+            32 + NoiseSession.MLKEM_PUBLIC_KEY_SIZE // 1216
+
+        private fun isHandshakeMessage1(messageSize: Int): Boolean =
+            messageSize == HANDSHAKE_MESSAGE_1_SIZE ||
+                messageSize == POST_QUANTUM_MESSAGE_1_SIZE
     }
 
     private val sessions = ConcurrentHashMap<String, NoiseSession>()
     // An inbound replacement handshake must prove its authenticated static-key binding before it
     // can evict a working transport session. Keep responder candidates outside the active map.
     private val responderCandidates = ConcurrentHashMap<String, NoiseSession>()
+
+    // Peers for which we already issued the one-shot classic-X25519 fallback retry after a
+    // post-quantum handshake timed out. Reset once a session establishes, so a peer that upgrades
+    // to post-quantum later can negotiate it normally.
+    private val classicFallbackTried = ConcurrentHashMap.newKeySet<String>()
 
     private val sweepScheduler = Executors.newSingleThreadScheduledExecutor { runnable ->
         Thread(runnable, "NoiseHandshakeSweeper").apply { isDaemon = true }
@@ -80,6 +109,13 @@ class NoiseSessionManager(
     // Callbacks
     var onSessionEstablished: ((String, ByteArray) -> Unit)? = null
     var onSessionFailed: ((String, Throwable) -> Unit)? = null
+
+    /**
+     * Invoked when a post-quantum handshake timed out and this manager re-initiated once with the
+     * classic X25519 protocol. The message-1 payload must be sent to the peer exactly like a
+     * normal handshake message.
+     */
+    var onClassicFallbackInitiated: ((String, ByteArray) -> Unit)? = null
     
     // MARK: - Simple Session Management
 
@@ -146,13 +182,8 @@ class NoiseSessionManager(
             }
         }
         
-        // Create new session as initiator
-        val session = NoiseSession(
-            peerID = peerID,
-            isInitiator = true,
-            localStaticPrivateKey = localStaticPrivateKey,
-            localStaticPublicKey = localStaticPublicKey
-        )
+        // Create new session as initiator (protocol resolved via the post-quantum provider)
+        val session = createSession(peerID, isInitiator = true)
         addSession(peerID, session)
         
         try {
@@ -182,9 +213,19 @@ class NoiseSessionManager(
         var response: ByteArray? = null
 
         try {
+            val responderPostQuantum = responderPostQuantumFor(message)
+
+            // Post-quantum-only mode: refuse a classic initiator outright instead of answering
+            // in classic. The responder never downgrades, so an attacker cannot force a
+            // quantum-readable session by replaying classic handshake messages.
+            if (!responderPostQuantum && isBlockingClassic()) {
+                Log.w(TAG, "Refusing classic X25519 handshake from ${peerID.take(8)} (post-quantum-only mode)")
+                throw NoiseSessionError.HandshakeFailed
+            }
+
             val existingCandidate = responderCandidates[peerID]
             if (existingCandidate != null) {
-                activeSession = if (message.size == HANDSHAKE_MESSAGE_1_SIZE) {
+                activeSession = if (isHandshakeMessage1(message.size)) {
                     if (existingCandidate.isInitiatorRole()) {
                         val shouldYield = localPeerID > peerID
                         if (!shouldYield) {
@@ -197,7 +238,11 @@ class NoiseSessionManager(
                     }
                     responderCandidates.remove(peerID, existingCandidate)
                     existingCandidate.destroy()
-                    createSession(peerID, isInitiator = false).also {
+                    createSession(
+                        peerID,
+                        isInitiator = false,
+                        postQuantum = responderPostQuantum
+                    ).also {
                         responderCandidates[peerID] = it
                     }
                 } else {
@@ -211,7 +256,7 @@ class NoiseSessionManager(
                 if (session != null &&
                     session.isHandshaking() &&
                     session.isInitiatorRole() &&
-                    message.size == HANDSHAKE_MESSAGE_1_SIZE
+                    isHandshakeMessage1(message.size)
                 ) {
                     val shouldYield = localPeerID > peerID
                     if (shouldYield) {
@@ -225,21 +270,33 @@ class NoiseSessionManager(
 
                 activeSession = when {
                     session == null -> {
-                        createSession(peerID, isInitiator = false).also { sessions[peerID] = it }
+                        createSession(
+                            peerID,
+                            isInitiator = false,
+                            postQuantum = responderPostQuantum
+                        ).also { sessions[peerID] = it }
                     }
                     session.isEstablished() -> {
                         isReplacementCandidate = true
-                        createSession(peerID, isInitiator = false).also {
+                        createSession(
+                            peerID,
+                            isInitiator = false,
+                            postQuantum = responderPostQuantum
+                        ).also {
                             responderCandidates[peerID] = it
                         }
                     }
                     session.isHandshaking() &&
                         !session.isInitiatorRole() &&
-                        message.size == HANDSHAKE_MESSAGE_1_SIZE -> {
+                        isHandshakeMessage1(message.size) -> {
                         // A restarted responder handshake can replace an incomplete session because
                         // there is no working transport state to preserve.
                         if (sessions.remove(peerID, session)) session.destroy()
-                        createSession(peerID, isInitiator = false).also { sessions[peerID] = it }
+                        createSession(
+                            peerID,
+                            isInitiator = false,
+                            postQuantum = responderPostQuantum
+                        ).also { sessions[peerID] = it }
                     }
                     else -> session
                 }
@@ -269,6 +326,7 @@ class NoiseSessionManager(
 
                 establishedRemoteKey = remoteStaticKey
                 establishedSessionToken = sessionToken
+                classicFallbackTried.remove(peerID)
             }
         } catch (e: Exception) {
             val session = activeSession
@@ -294,17 +352,62 @@ class NoiseSessionManager(
         )
     }
 
-    private fun createSession(peerID: String, isInitiator: Boolean): NoiseSession = NoiseSession(
+    private fun createSession(
+        peerID: String,
+        isInitiator: Boolean,
+        postQuantum: Boolean? = null
+    ): NoiseSession = NoiseSession(
         peerID = peerID,
         isInitiator = isInitiator,
         localStaticPrivateKey = localStaticPrivateKey,
-        localStaticPublicKey = localStaticPublicKey
+        localStaticPublicKey = localStaticPublicKey,
+        postQuantum = postQuantum ?: runCatching { postQuantumProvider() }.getOrDefault(true)
     )
+
+    /**
+     * Resolve the responder protocol from the size of the incoming handshake message 1.
+     * A 32-byte message can only be a classic XX ephemeral; a 1216-byte message is the hybrid
+     * XXhfs message 1. Classic is only ever selected here when the local post-quantum setting is
+     * off (or a classic peer is explicitly allowed via [blockClassicProvider]).
+     */
+    private fun responderPostQuantumFor(message: ByteArray): Boolean =
+        message.size != HANDSHAKE_MESSAGE_1_SIZE &&
+            runCatching { postQuantumProvider() }.getOrDefault(true)
+
+    /**
+     * Whether classic X25519-only handshakes must be refused. Only meaningful while post-quantum
+     * is enabled: when the user has explicitly turned post-quantum off, classic is the intended
+     * protocol and is never blocked.
+     */
+    private fun isBlockingClassic(): Boolean =
+        runCatching { postQuantumProvider() }.getOrDefault(true) &&
+            runCatching { blockClassicProvider() }.getOrDefault(false)
 
     private fun isHandshakeStale(session: NoiseSession, nowMs: Long): Boolean {
         val lastActivity = session.getLastHandshakeActivityMs() ?: session.getHandshakeStartMs()
         if (lastActivity == null) return false
         return (nowMs - lastActivity) > HANDSHAKE_TIMEOUT_MS
+    }
+
+    /**
+     * Re-initiates a timed-out post-quantum handshake once using the classic X25519 protocol.
+     * The produced message 1 is handed to [onClassicFallbackInitiated] for transport. Only
+     * invoked when classic interop is permitted (post-quantum-only mode is off).
+     */
+    private fun retryAsClassicInitiator(peerID: String) {
+        try {
+            val fallback = createSession(peerID, isInitiator = true, postQuantum = false)
+            addSession(peerID, fallback)
+            val message1 = fallback.startHandshake()
+            Log.i(
+                TAG,
+                "PQ handshake with $peerID timed out; retrying once with classic X25519"
+            )
+            runCatching { onClassicFallbackInitiated?.invoke(peerID, message1) }
+        } catch (e: Exception) {
+            Log.w(TAG, "Classic fallback handshake with $peerID failed to start: ${e.message}")
+            sessions.remove(peerID)?.destroy()
+        }
     }
 
     /**
@@ -319,6 +422,13 @@ class NoiseSessionManager(
                 if (sessions.remove(peerID, session)) {
                     session.destroy()
                     runCatching { onSessionFailed?.invoke(peerID, NoiseSessionError.HandshakeTimeout) }
+                    // The responder never answered (likely an older build that cannot parse the
+                    // hybrid message 1). Retry once with the classic X25519 protocol so a PQ
+                    // initiator can still reach a classic-only responder — unless post-quantum-only
+                    // mode is active, in which case the timeout is final and the session stays dead.
+                    if (session.isPostQuantumSession() && classicFallbackTried.add(peerID) && !isBlockingClassic()) {
+                        retryAsClassicInitiator(peerID)
+                    }
                 }
             }
         }
@@ -393,6 +503,16 @@ class NoiseSessionManager(
      */
     fun getSessionState(peerID: String): NoiseSession.NoiseSessionState {
         return getSession(peerID)?.getState() ?: NoiseSession.NoiseSessionState.Uninitialized
+    }
+
+    /**
+     * Whether the established session with this peer negotiated the hybrid ML-KEM
+     * (post-quantum) protocol. False when there is no established session or it fell back
+     * to classic X25519.
+     */
+    fun isSessionPostQuantum(peerID: String): Boolean {
+        val session = getSession(peerID) ?: return false
+        return session.isEstablished() && session.isPostQuantumSession()
     }
     
     /**

@@ -139,6 +139,7 @@
     <string name="cd_file">Dosya</string>
     <string name="cd_image">Görsel</string>
     <string name="cd_cancel">İptal</string>
+    <string name="cd_retry">Tekrar gönder</string>
     <string name="cd_link">Bağlantı</string>
     <string name="cd_pick_media">Medya seç</string>
     <string name="cd_record_voice">Ses notu kaydet</string>

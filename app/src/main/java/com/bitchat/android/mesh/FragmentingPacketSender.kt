@@ -23,6 +23,17 @@ class FragmentingPacketSender(
     private val logTag: String,
     private val interFragmentDelayMs: Long = 20L
 ) {
+    companion object {
+        // A BLE notification/write can be rejected transiently (GATT buffer full, link
+        // momentarily busy, connection handover). Retrying the same fragment a bounded number
+        // of times before giving up keeps media sends alive through these hiccups instead of
+        // marking the message failed — the common cause of spurious ⚠ warnings on images/files.
+        // Internal so unit tests can assert against the real retry budget without widening
+        // the public API surface.
+        internal const val MAX_FRAGMENT_SEND_RETRIES = 2
+        private const val FRAGMENT_RETRY_BASE_DELAY_MS = 150L
+    }
+
     private val transferJobs = ConcurrentHashMap<String, Job>()
 
     fun send(
@@ -78,11 +89,27 @@ class FragmentingPacketSender(
                     transferId = transferId,
                     preparedPackets = null
                 )
-                val delivered = try {
-                    sendSingle(fragment)
-                } catch (e: Exception) {
-                    Log.e(logTag, "Fragment send failed for $description: ${e.message}", e)
-                    false
+                var delivered = false
+                var attempt = 0
+                while (!delivered && attempt <= MAX_FRAGMENT_SEND_RETRIES) {
+                    if (!isActive) return@launch
+                    if (transferId != null && transferJobs[transferId]?.isCancelled == true) return@launch
+
+                    delivered = try {
+                        sendSingle(fragment)
+                    } catch (e: Exception) {
+                        Log.e(logTag, "Fragment send failed for $description: ${e.message}", e)
+                        false
+                    }
+
+                    if (!delivered && attempt < MAX_FRAGMENT_SEND_RETRIES) {
+                        Log.w(
+                            logTag,
+                            "Retrying fragment for $description (attempt ${attempt + 1}/$MAX_FRAGMENT_SEND_RETRIES) after transient write failure"
+                        )
+                        delay(FRAGMENT_RETRY_BASE_DELAY_MS * (attempt + 1))
+                    }
+                    attempt += 1
                 }
 
                 if (!delivered) {

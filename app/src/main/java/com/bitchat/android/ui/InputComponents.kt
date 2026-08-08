@@ -317,7 +317,17 @@ fun MessageInput(
     nickname: String,
     showMediaButtons: Boolean,
     mentionPeerIdentities: Map<String, PeerIdentity> = emptyMap(),
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /**
+     * Longest-side bound for outgoing images. BLE-only private chats pass a smaller bound so
+     * the payload rides the slow radio faster and is less likely to fail mid-transfer.
+     */
+    maxImageDim: Int = com.bitchat.android.features.media.ImageUtils.DEFAULT_IMAGE_MAX_DIM,
+    /**
+     * JPEG quality for outgoing images. BLE-only private chats pass a lower quality so the
+     * payload shrinks further on the slow radio.
+     */
+    maxImageQuality: Int = com.bitchat.android.features.media.ImageUtils.DEFAULT_IMAGE_QUALITY
 ) {
     val palette = LocalBitchatPalette.current
     val colorScheme = MaterialTheme.colorScheme
@@ -591,6 +601,8 @@ fun MessageInput(
                                     )
                             ) {
                                 ImagePickerButton(
+                                    maxImageDim = maxImageDim,
+                                    maxImageQuality = maxImageQuality,
                                     onImageReady = { outPath ->
                                         onSendImageNote(
                                             latestSelectedPeer.value,

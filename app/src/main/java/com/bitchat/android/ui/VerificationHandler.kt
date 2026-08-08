@@ -33,6 +33,11 @@ class VerificationHandler(
     private val notificationManager: NotificationManager,
     private val messageManager: MessageManager
 ) {
+    companion object {
+        // How long an accepted QR scan waits for its peer to appear on the mesh
+        // before the deferred verification is dropped.
+        private const val PENDING_BY_NOISE_KEY_TTL_MS = 10 * 60_000L
+    }
     // Helper to get current mesh service (may change after panic clear)
     private val meshService: MeshService
         get() = getMeshService()
@@ -41,6 +46,10 @@ class VerificationHandler(
     val verifiedFingerprints: StateFlow<Set<String>> = _verifiedFingerprints.asStateFlow()
 
     private val pendingQRVerifications = ConcurrentHashMap<String, PendingVerification>()
+    // QR scans accepted before the peer was discovered/connected, keyed by the scanned Noise key.
+    // Promoted into pendingQRVerifications by flushPendingVerifications() once the peer appears.
+    private val pendingByNoiseKey = ConcurrentHashMap<String, PendingVerification>()
+    private val pendingByNoiseKeyAddedAt = ConcurrentHashMap<String, Long>()
     private val lastVerifyNonceByPeer = ConcurrentHashMap<String, ByteArray>()
     private val lastInboundVerifyChallengeAt = ConcurrentHashMap<String, Long>()
     private val lastMutualToastAt = ConcurrentHashMap<String, Long>()
@@ -73,13 +82,31 @@ class VerificationHandler(
         val peerID = state.getConnectedPeersValue().firstOrNull { pid ->
             val noiseKeyHex = meshService.getPeerInfo(pid)?.noisePublicKey?.hexEncodedString()?.lowercase()
             noiseKeyHex == targetNoise
-        } ?: return false
-
-        if (pendingQRVerifications.containsKey(peerID)) return true
+        }
         val nonce = ByteArray(16)
         java.security.SecureRandom().nextBytes(nonce)
         val pending = PendingVerification(qr.noiseKeyHex, qr.signKeyHex, nonce, System.currentTimeMillis(), false)
+
+        if (peerID == null) {
+            // The scanned peer is not on the mesh yet. Accept the scan and remember it by Noise
+            // key; flushPendingVerifications() completes the challenge/response once a peer with
+            // this Noise key is discovered and a session is established.
+            fingerprintFromNoiseHex(qr.noiseKeyHex)?.let { fp ->
+                identityManager.cacheFingerprintNickname(fp, qr.nickname)
+                identityManager.cacheNoiseFingerprint(qr.noiseKeyHex, fp)
+            }
+            pendingByNoiseKey[targetNoise] = pending
+            pendingByNoiseKeyAddedAt[targetNoise] = System.currentTimeMillis()
+            return true
+        }
+
+        if (pendingQRVerifications.containsKey(peerID)) return true
         pendingQRVerifications[peerID] = pending
+        fingerprintFromNoiseHex(qr.noiseKeyHex)?.let { fp ->
+            identityManager.cacheFingerprintNickname(fp, qr.nickname)
+            identityManager.cacheNoiseFingerprint(qr.noiseKeyHex, fp)
+            identityManager.cachePeerNoiseKey(peerID, qr.noiseKeyHex)
+        }
 
         if (meshService.getSessionState(peerID) is NoiseSession.NoiseSessionState.Established) {
             meshService.sendVerifyChallenge(peerID, qr.noiseKeyHex, nonce)
@@ -87,12 +114,40 @@ class VerificationHandler(
         } else {
             meshService.initiateNoiseHandshake(peerID)
         }
-        fingerprintFromNoiseHex(qr.noiseKeyHex)?.let { fp ->
-            identityManager.cacheFingerprintNickname(fp, qr.nickname)
-            identityManager.cacheNoiseFingerprint(qr.noiseKeyHex, fp)
-            identityManager.cachePeerNoiseKey(peerID, qr.noiseKeyHex)
-        }
         return true
+    }
+
+    /**
+     * Promotes deferred QR scans once their peer appears on the mesh. Called on every reactive
+     * state tick; also prunes scans whose peer never showed up within the TTL.
+     */
+    fun flushPendingVerifications(peerIDs: List<String>) {
+        if (pendingByNoiseKey.isEmpty()) return
+        val now = System.currentTimeMillis()
+        val expired = pendingByNoiseKeyAddedAt.entries
+            .filter { (_, addedAt) -> now - addedAt > PENDING_BY_NOISE_KEY_TTL_MS }
+            .map { it.key }
+        expired.forEach { key ->
+            pendingByNoiseKey.remove(key)
+            pendingByNoiseKeyAddedAt.remove(key)
+        }
+        peerIDs.forEach { pid ->
+            val noiseHex = meshService.getPeerInfo(pid)?.noisePublicKey?.hexEncodedString()?.lowercase()
+                ?: return@forEach
+            val pending = pendingByNoiseKey.remove(noiseHex) ?: return@forEach
+            pendingByNoiseKeyAddedAt.remove(noiseHex)
+            if (pendingQRVerifications.containsKey(pid)) return@forEach
+            pendingQRVerifications[pid] = pending
+            fingerprintFromNoiseHex(pending.noiseKeyHex)?.let { fp ->
+                identityManager.cachePeerNoiseKey(pid, pending.noiseKeyHex)
+            }
+            if (meshService.getSessionState(pid) is NoiseSession.NoiseSessionState.Established) {
+                meshService.sendVerifyChallenge(pid, pending.noiseKeyHex, pending.nonceA)
+                pendingQRVerifications[pid] = pending.copy(sent = true)
+            } else {
+                meshService.initiateNoiseHandshake(pid)
+            }
+        }
     }
 
     fun sendPendingVerificationIfNeeded(peerID: String) {

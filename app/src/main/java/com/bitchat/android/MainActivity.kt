@@ -865,7 +865,10 @@ class MainActivity : OrientationAwareActivity() {
 
     private fun handleVerificationIntent(intent: Intent) {
         val uri = intent.data ?: return
-        if (uri.scheme != "deadair" || uri.host != "verify") return
+        // Accept the legacy "bitchat" scheme too, so QR codes emitted by pre-rebrand builds
+        // and scanned via the system camera still resolve into the verification flow.
+        val scheme = uri.scheme?.lowercase()
+        if ((scheme != "deadair" && scheme != "bitchat") || uri.host != "verify") return
 
         chatViewModel.showVerificationSheet()
         val qr = VerificationService.verifyScannedQR(uri.toString())

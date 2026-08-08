@@ -22,7 +22,6 @@ This was built from the ground up as a **judge-ready hackathon submission**, sho
 - **Crowd Pulse:** Live RSSI-based venue density indicator
 - **Media Sharing:** In-app camera capture & voice notes over mesh
 - **Mesh Recall:** Retract messages/media across all connected devices
-- **Emergency SOS:** Priority broadcast that bypasses all filters
 - **End-to-End Encryption:** Noise Protocol + Ed25519 signatures
 
 ---
@@ -63,7 +62,6 @@ com.eventpulse.mesh/           # New Dead Air features
 ├── EventPulsePacket.kt        # JSON payload model (512B max)
 ├── CrowdDensityCalculator.kt  # RSSI-based crowd density
 ├── EventPulseRateLimiter.kt   # 280-char + rate limiting
-├── EventPulseSOSHandler.kt    # Emergency alert management
 ├── EventPulseRetractionManager.kt  # Mesh Recall engine
 ├── EventPulseMediaChunker.kt  # 480B chunking + WebP compression
 ├── EventPulseMediaCapture.kt  # Camera + voice capture UI

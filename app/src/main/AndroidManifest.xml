@@ -132,7 +132,9 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <!-- Keep the legacy bitchat scheme so pre-rebrand QR deep links still open. -->
                 <data android:scheme="deadair" android:host="verify" />
+                <data android:scheme="bitchat" android:host="verify" />
             </intent-filter>
         </activity>
 

@@ -10,6 +10,8 @@ import com.bitchat.android.noise.NoiseEncryptionService
 import com.bitchat.android.noise.NoiseHandshakeProcessingResult
 import com.bitchat.android.noise.AuthenticatedNoiseSession
 import com.bitchat.android.noise.NoiseDecryptionResult
+import com.bitchat.android.identity.AndroidIdentityKeystoreCipher
+import com.bitchat.android.identity.IdentityKeystoreCipher
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair
 import org.bouncycastle.crypto.generators.Ed25519KeyPairGenerator
 import org.bouncycastle.crypto.params.Ed25519KeyGenerationParameters
@@ -34,6 +36,18 @@ open class EncryptionService(private val context: Context) {
         private const val ED25519_PRIVATE_KEY_PREF = "ed25519_signing_private_key"
         private const val OLD_PREFS_NAME = "bitchat_crypto"
         private const val SECURE_PREFS_NAME = "bitchat_crypto_secure"
+        private const val ED25519_KEY_AAD = "ed25519_signing"
+
+        /**
+         * Test seam: inject a fake cipher (e.g. under Robolectric, where the real AndroidKeyStore
+         * provider is unavailable) so envelope-format behavior is deterministic. Null in production.
+         */
+        internal var identityCipherFactory: (() -> IdentityKeystoreCipher)? = null
+    }
+
+    // Hardware-backed Keystore envelope for the Ed25519 packet-signing key (StrongBox-preferred).
+    private val identityKeyCipher: IdentityKeystoreCipher by lazy {
+        identityCipherFactory?.invoke() ?: AndroidIdentityKeystoreCipher()
     }
     
     // Core Noise encryption service
@@ -94,7 +108,18 @@ open class EncryptionService(private val context: Context) {
             Log.d(TAG, "🤝 Handshake required for $peerID")
             onHandshakeRequired?.invoke(peerID)
         }
+
+        noiseService.onClassicFallbackMessage = { peerID, message1 ->
+            onClassicFallbackMessage?.invoke(peerID, message1)
+        }
     }
+
+    /**
+     * Invoked when a post-quantum handshake timed out and was re-initiated once with the classic
+     * X25519 protocol. Wire this to deliver the message-1 payload to the peer like a normal
+     * handshake message.
+     */
+    var onClassicFallbackMessage: ((String, ByteArray) -> Unit)? = null
     
     // MARK: - Public API (Maintains backward compatibility)
     
@@ -255,6 +280,14 @@ open class EncryptionService(private val context: Context) {
      */
     fun getSessionState(peerID: String): com.bitchat.android.noise.NoiseSession.NoiseSessionState {
         return noiseService.getSessionState(peerID)
+    }
+
+    /**
+     * Whether the established session with this peer used the hybrid ML-KEM (post-quantum)
+     * protocol rather than the classic X25519 fallback.
+     */
+    fun isSessionPostQuantum(peerID: String): Boolean {
+        return noiseService.isSessionPostQuantum(peerID)
     }
     
     /**
@@ -467,12 +500,21 @@ open class EncryptionService(private val context: Context) {
             val storedKey = prefs.getString(ED25519_PRIVATE_KEY_PREF, null)
 
             if (storedKey != null) {
-                // Load existing key
-                val privateKeyBytes = Base64.decode(storedKey, Base64.DEFAULT)
-                val privateKey = Ed25519PrivateKeyParameters(privateKeyBytes, 0)
-                val publicKey = privateKey.generatePublicKey()
-                Log.d(TAG, "✅ Loaded existing Ed25519 signing key pair")
-                return AsymmetricCipherKeyPair(publicKey, privateKey)
+                // Load existing key (Keystore-wrapped envelope or legacy Base64), migrating in place.
+                val privateKeyBytes = decodeEd25519Key(storedKey)
+                if (privateKeyBytes != null) {
+                    val privateKey = Ed25519PrivateKeyParameters(privateKeyBytes, 0)
+                    val publicKey = privateKey.generatePublicKey()
+                    // Rewrite legacy plain Base64 as a Keystore envelope so at-rest material is
+                    // hardware-protected going forward (best-effort, never blocks identity load).
+                    if (!storedKey.startsWith(IdentityKeystoreCipher.ENVELOPE_PREFIX)) {
+                        runCatching {
+                            prefs.edit { putString(ED25519_PRIVATE_KEY_PREF, encodeEd25519Key(privateKeyBytes)) }
+                        }
+                    }
+                    Log.d(TAG, "✅ Loaded existing Ed25519 signing key pair")
+                    return AsymmetricCipherKeyPair(publicKey, privateKey)
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "⚠️ Failed to load existing Ed25519 key, creating new one: ${e.message}")
@@ -491,7 +533,7 @@ open class EncryptionService(private val context: Context) {
         try {
             val privateKey = keyPair.private as Ed25519PrivateKeyParameters
             val privateKeyBytes = privateKey.encoded
-            val encodedKey = Base64.encodeToString(privateKeyBytes, Base64.DEFAULT)
+            val encodedKey = encodeEd25519Key(privateKeyBytes)
 
             prefs.edit { putString(ED25519_PRIVATE_KEY_PREF, encodedKey) }
             Log.d(TAG, "✅ Created and stored new Ed25519 signing key pair")
@@ -502,6 +544,47 @@ open class EncryptionService(private val context: Context) {
         return keyPair
     }
 
+    /**
+     * Wrap raw Ed25519 seed bytes in a Keystore-encrypted envelope (falling back to plain Base64
+     * inside EncryptedSharedPreferences when Keystore is unavailable).
+     */
+    private fun encodeEd25519Key(raw: ByteArray): String {
+        return try {
+            IdentityKeystoreCipher.ENVELOPE_PREFIX + Base64.encodeToString(
+                identityKeyCipher.encrypt(raw, ED25519_KEY_AAD.toByteArray()),
+                Base64.NO_WRAP
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "⚠️ Keystore wrap failed (${e.message}); storing legacy format")
+            Base64.encodeToString(raw, Base64.DEFAULT)
+        }
+    }
+
+    /**
+     * Unwrap a stored Ed25519 seed, accepting either a Keystore envelope or legacy Base64.
+     * Returns null when the value cannot be read (corrupt, or the Keystore key was erased).
+     */
+    private fun decodeEd25519Key(stored: String): ByteArray? {
+        if (stored.startsWith(IdentityKeystoreCipher.ENVELOPE_PREFIX)) {
+            return try {
+                val envelope = Base64.decode(
+                    stored.removePrefix(IdentityKeystoreCipher.ENVELOPE_PREFIX),
+                    Base64.NO_WRAP
+                )
+                identityKeyCipher.decrypt(envelope, ED25519_KEY_AAD.toByteArray())
+            } catch (e: Exception) {
+                Log.w(TAG, "⚠️ Failed to unwrap Ed25519 key: ${e.message}")
+                null
+            }
+        }
+        return try {
+            Base64.decode(stored, Base64.DEFAULT)
+        } catch (e: Exception) {
+            Log.w(TAG, "⚠️ Failed to decode legacy Ed25519 key: ${e.message}")
+            null
+        }
+    }
+
     private fun migrateOldEd25519KeyIfNeeded() {
         try {
             // old existing plain text preference
@@ -510,13 +593,19 @@ open class EncryptionService(private val context: Context) {
             val oldKey = oldPrefs.getString(ED25519_PRIVATE_KEY_PREF, null)
 
             if (oldKey != null && !prefs.contains(ED25519_PRIVATE_KEY_PREF)) {
+                // Re-wrap directly into the Keystore envelope so no plain-Base64 window exists
+                // between this migration and the first load.
+                val raw = runCatching { Base64.decode(oldKey, Base64.DEFAULT) }.getOrNull()
                 prefs.edit {
-                    putString(ED25519_PRIVATE_KEY_PREF, oldKey)
+                    putString(
+                        ED25519_PRIVATE_KEY_PREF,
+                        if (raw != null) encodeEd25519Key(raw) else oldKey
+                    )
                 }
                 oldPrefs.edit {
                     remove(ED25519_PRIVATE_KEY_PREF)
                 }
-                Log.d(TAG, "🔁 Migrated Ed25519 key to EncryptedSharedPreferences")
+                Log.d(TAG, "🔁 Migrated Ed25519 key to Keystore-wrapped storage")
             }
         } catch (e: Exception) {
             Log.w(TAG, "⚠️ Failed to migrate Ed25519 key; generating new identity: ${e.message}")

@@ -201,6 +201,7 @@
   <string name="cd_file">檔案</string>
   <string name="cd_image">圖片</string>
   <string name="cd_cancel">取消</string>
+  <string name="cd_retry">重新傳送</string>
   <string name="cd_link">連結</string>
   <string name="cd_record_voice">錄製語音訊息</string>
   <string name="cd_pick_media">選擇媒體</string>

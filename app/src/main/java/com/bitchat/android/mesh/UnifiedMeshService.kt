@@ -22,9 +22,11 @@ import kotlinx.coroutines.launch
 /**
  * Feature-facing mesh service that hides local transport selection from the rest of the app.
  *
- * BLE remains the canonical origin for broadcast packets when it is enabled so existing BLE mesh
- * behavior and bridge semantics stay intact. Addressed Noise traffic is routed over whichever
- * local transport already has the peer/session, falling back to a connected transport handshake.
+ * Wi-Fi is the primary transport: Wi-Fi Aware and Wi-Fi Direct carry all traffic (messages,
+ * media, handshakes) whenever a peer is reachable on either. BLE stays enabled as a secondary
+ * fallback for discovery and for devices without Wi-Fi. Addressed Noise traffic is routed over
+ * whichever local transport already has the peer/session, falling back to a connected transport
+ * handshake.
  */
 class UnifiedMeshService(
     private val context: Context,
@@ -55,20 +57,20 @@ class UnifiedMeshService(
     }
 
     override fun startServices() {
+        // Wi-Fi is the primary transport: start Wi-Fi Aware + Direct first so discovery and
+        // handshakes prefer them; BLE remains enabled as a secondary fallback.
+        try { WifiAwareController.startIfPossible() } catch (e: Exception) {
+            Log.w(TAG, "Failed to start Wi-Fi Aware transport: ${e.message}")
+        }
+        try { com.bitchat.android.wifidirect.WifiDirectController.startIfPossible() } catch (e: Exception) {
+            Log.w(TAG, "Failed to start Wi-Fi Direct transport: ${e.message}")
+        }
         if (isBleEnabled()) {
             try { bluetooth.startServices() } catch (e: Exception) {
                 Log.w(TAG, "Failed to start BLE transport: ${e.message}")
             }
         } else {
             try { bluetooth.setBleTransportEnabled(false) } catch (_: Exception) { }
-        }
-        // Wi-Fi transports run in parallel with BLE: Aware + Direct provide high-bandwidth
-        // paths (preferred for media/files), BLE keeps discovery/presence duties.
-        try { WifiAwareController.startIfPossible() } catch (e: Exception) {
-            Log.w(TAG, "Failed to start Wi-Fi Aware transport: ${e.message}")
-        }
-        try { com.bitchat.android.wifidirect.WifiDirectController.startIfPossible() } catch (e: Exception) {
-            Log.w(TAG, "Failed to start Wi-Fi Direct transport: ${e.message}")
         }
         startAnnouncementScheduler()
         refreshDelegates()
@@ -103,9 +105,13 @@ class UnifiedMeshService(
     }
 
     override fun sendMessage(content: String, mentions: List<String>, channel: String?) {
-        when {
-            isBleEnabled() -> bluetooth.sendMessage(content, mentions, channel)
-            else -> wifiService()?.sendMessage(content, mentions, channel)
+        // Broadcasts go out on every active radio (Wi-Fi Aware, Wi-Fi Direct, then BLE) so a
+        // message is never stranded on a transport with zero peers — same dual-radio pattern as
+        // sendBroadcastAnnounce. Peers on multiple radios dedupe by message ID downstream.
+        try { wifiService()?.sendMessage(content, mentions, channel) } catch (_: Exception) { }
+        try { p2pService()?.sendMessage(content, mentions, channel) } catch (_: Exception) { }
+        if (isBleEnabled()) {
+            try { bluetooth.sendMessage(content, mentions, channel) } catch (_: Exception) { }
         }
     }
 
@@ -116,9 +122,11 @@ class UnifiedMeshService(
         messageID: String?
     ) {
         when {
-            isBleReady(recipientPeerID) -> bluetooth.sendPrivateMessage(content, recipientPeerID, recipientNickname, messageID)
             isWifiReady(recipientPeerID) -> wifiService()?.sendPrivateMessage(content, recipientPeerID, recipientNickname, messageID)
             isP2pReady(recipientPeerID) -> p2pService()?.sendPrivateMessage(content, recipientPeerID, recipientNickname, messageID)
+            isBleReady(recipientPeerID) -> bluetooth.sendPrivateMessage(content, recipientPeerID, recipientNickname, messageID)
+            isWifiConnected(recipientPeerID) -> wifiService()?.sendPrivateMessage(content, recipientPeerID, recipientNickname, messageID)
+            isP2pConnected(recipientPeerID) -> p2pService()?.sendPrivateMessage(content, recipientPeerID, recipientNickname, messageID)
             isBleConnected(recipientPeerID) || (isBleEnabled() && !isAnyWifiConnected(recipientPeerID)) ->
                 bluetooth.sendPrivateMessage(content, recipientPeerID, recipientNickname, messageID)
             else -> {
@@ -140,9 +148,9 @@ class UnifiedMeshService(
 
     override fun sendReadReceipt(messageID: String, recipientPeerID: String, readerNickname: String) {
         when {
-            isBleReady(recipientPeerID) -> bluetooth.sendReadReceipt(messageID, recipientPeerID, readerNickname)
             isWifiReady(recipientPeerID) -> wifiService()?.sendReadReceipt(messageID, recipientPeerID, readerNickname)
             isP2pReady(recipientPeerID) -> p2pService()?.sendReadReceipt(messageID, recipientPeerID, readerNickname)
+            isBleReady(recipientPeerID) -> bluetooth.sendReadReceipt(messageID, recipientPeerID, readerNickname)
             else -> {
                 // 2-hop peer: deliver the receipt along the same source route as the message.
                 val viaFirstHop = firstHopTransportFor(recipientPeerID)
@@ -170,9 +178,9 @@ class UnifiedMeshService(
 
     override fun sendVerifyChallenge(peerID: String, noiseKeyHex: String, nonceA: ByteArray) {
         when {
-            isBleReady(peerID) -> bluetooth.sendVerifyChallenge(peerID, noiseKeyHex, nonceA)
             isWifiReady(peerID) -> wifiService()?.sendVerifyChallenge(peerID, noiseKeyHex, nonceA)
             isP2pReady(peerID) -> p2pService()?.sendVerifyChallenge(peerID, noiseKeyHex, nonceA)
+            isBleReady(peerID) -> bluetooth.sendVerifyChallenge(peerID, noiseKeyHex, nonceA)
             else -> {
                 val viaFirstHop = firstHopTransportFor(peerID)
                 if (viaFirstHop != null) {
@@ -186,9 +194,9 @@ class UnifiedMeshService(
 
     override fun sendVerifyResponse(peerID: String, noiseKeyHex: String, nonceA: ByteArray) {
         when {
-            isBleReady(peerID) -> bluetooth.sendVerifyResponse(peerID, noiseKeyHex, nonceA)
             isWifiReady(peerID) -> wifiService()?.sendVerifyResponse(peerID, noiseKeyHex, nonceA)
             isP2pReady(peerID) -> p2pService()?.sendVerifyResponse(peerID, noiseKeyHex, nonceA)
+            isBleReady(peerID) -> bluetooth.sendVerifyResponse(peerID, noiseKeyHex, nonceA)
             else -> {
                 val viaFirstHop = firstHopTransportFor(peerID)
                 if (viaFirstHop != null) {
@@ -319,17 +327,18 @@ class UnifiedMeshService(
     }
 
     override fun sendBroadcastAnnounce() {
+        // Wi-Fi first (primary transport), then BLE as the secondary radio.
+        try { wifiService()?.sendBroadcastAnnounce() } catch (_: Exception) { }
         if (isBleEnabled()) {
             try { bluetooth.sendBroadcastAnnounce() } catch (_: Exception) { }
         }
-        try { wifiService()?.sendBroadcastAnnounce() } catch (_: Exception) { }
     }
 
     override fun sendAnnouncementToPeer(peerID: String) {
         when {
-            isBleConnected(peerID) || (isBleEnabled() && !isAnyWifiConnected(peerID)) -> bluetooth.sendAnnouncementToPeer(peerID)
             isWifiConnected(peerID) -> wifiService()?.sendAnnouncementToPeer(peerID)
             isP2pConnected(peerID) -> p2pService()?.sendAnnouncementToPeer(peerID)
+            isBleConnected(peerID) || (isBleEnabled() && !isAnyWifiConnected(peerID)) -> bluetooth.sendAnnouncementToPeer(peerID)
             else -> {
                 val viaFirstHop = firstHopTransportFor(peerID)
                 when {
@@ -383,11 +392,18 @@ class UnifiedMeshService(
         }
     }
 
+    override fun isSessionPostQuantum(peerID: String): Boolean {
+        val blePQ = try { bluetooth.isSessionPostQuantum(peerID) } catch (_: Exception) { false }
+        val wifiPQ = try { wifiService()?.isSessionPostQuantum(peerID) ?: false } catch (_: Exception) { false }
+        val p2pPQ = try { p2pService()?.isSessionPostQuantum(peerID) ?: false } catch (_: Exception) { false }
+        return blePQ || wifiPQ || p2pPQ
+    }
+
     override fun initiateNoiseHandshake(peerID: String) {
         when {
-            isBleConnected(peerID) -> bluetooth.initiateNoiseHandshake(peerID)
             isWifiConnected(peerID) -> wifiService()?.initiateNoiseHandshake(peerID)
             isP2pConnected(peerID) -> p2pService()?.initiateNoiseHandshake(peerID)
+            isBleConnected(peerID) -> bluetooth.initiateNoiseHandshake(peerID)
             else -> {
                 // 2-hop peer: kick the handshake on the transport that can reach the first hop
                 // so the source-routed handshake actually leaves this device.
@@ -423,6 +439,13 @@ class UnifiedMeshService(
             p2p?.isConnected == true -> p2p
             else -> ble ?: wifi ?: p2p
         }
+    }
+
+    override fun isPeerBleOnly(peerID: String): Boolean {
+        // Wi-Fi Aware and Wi-Fi Direct are the high-bandwidth transports; without either, a
+        // connected peer's media rides the slow BLE radio, so callers compress more aggressively.
+        if (isAnyWifiConnected(peerID)) return false
+        return isBleConnected(peerID) || isBleDirect(peerID)
     }
 
     override fun updatePeerInfo(
@@ -603,6 +626,7 @@ class UnifiedMeshService(
             try { com.bitchat.android.ui.debug.DebugPreferenceManager.getBleEnabled(true) } catch (_: Exception) { true }
         }
     }
+
 
     private fun isBleConnected(peerID: String): Boolean {
         return try { bluetooth.getPeerInfo(peerID)?.isConnected == true } catch (_: Exception) { false }

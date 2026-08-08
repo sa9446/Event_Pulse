@@ -139,6 +139,7 @@
     <string name="cd_file">Файл</string>
     <string name="cd_image">Изображение</string>
     <string name="cd_cancel">Отмена</string>
+    <string name="cd_retry">Повторить отправку</string>
     <string name="cd_link">Ссылка</string>
     <string name="cd_pick_media">Выбрать медиа</string>
     <string name="cd_record_voice">Записать голос</string>

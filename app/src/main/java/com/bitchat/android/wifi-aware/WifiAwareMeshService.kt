@@ -1477,6 +1477,8 @@ class WifiAwareMeshService(private val context: Context) : MeshService, Transpor
      */
     override fun getSessionState(peerID: String) = meshCore.getSessionState(peerID)
 
+    override fun isSessionPostQuantum(peerID: String) = meshCore.isSessionPostQuantum(peerID)
+
     /**
      * Triggers a Noise handshake with the given peer. Safe to call repeatedly; no-op if already handshaking/established.
      */

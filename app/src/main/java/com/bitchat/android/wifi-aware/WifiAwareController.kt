@@ -411,4 +411,14 @@ object WifiAwareController {
     }
 
     fun getService(): WifiAwareMeshService? = service
+
+    /**
+     * Test seam: swaps in a fake/stubbed transport service (or clears it with null).
+     * Production code routes exclusively through [startIfPossible]/[stop]; this exists so
+     * unit tests can exercise transport selection without driving the real Wi-Fi stack.
+     */
+    @VisibleForTesting
+    internal fun setServiceForTest(service: WifiAwareMeshService?) {
+        synchronized(lifecycleLock) { this.service = service }
+    }
 }

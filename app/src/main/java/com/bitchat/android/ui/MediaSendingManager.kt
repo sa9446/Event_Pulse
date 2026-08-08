@@ -1,6 +1,8 @@
 package com.bitchat.android.ui
 
 import android.util.Log
+import com.bitchat.android.features.voice.VoiceRecorder
+import com.bitchat.android.features.voice.VoiceTranscoder
 import com.bitchat.android.mesh.MeshService
 import com.bitchat.android.model.BitchatFilePacket
 import com.bitchat.android.model.BitchatMessage
@@ -68,10 +70,18 @@ class MediaSendingManager(
         val filePacket: BitchatFilePacket,
         val filePath: String,
         val messageType: BitchatMessageType,
-        val transferId: String
+        val transferId: String,
+        val existingMessageId: String? = null
     )
 
     private var pendingPrivateMedia: PendingPrivateMedia? = null
+
+    private data class RetrySendContext(
+        val message: BitchatMessage,
+        val filePath: String,
+        val peerIDOrNull: String?,
+        val channelOrNull: String?
+    )
 
     private data class PendingAutomaticPrivateMedia(
         val requestId: String,
@@ -81,7 +91,10 @@ class MediaSendingManager(
         val filePath: String,
         val messageType: BitchatMessageType,
         val transferId: String,
-        val allowLegacyFallback: Boolean
+        val allowLegacyFallback: Boolean,
+        // When set, the transfer updates this existing message in place (one-tap retry of a
+        // failed media bubble) instead of creating a new local echo.
+        val existingMessageId: String? = null
     )
 
     private var pendingAutomaticPrivateMedia: PendingAutomaticPrivateMedia? = null
@@ -106,8 +119,8 @@ class MediaSendingManager(
         val size = file.length()
         if (size <= MAX_FILE_SIZE) return false
         Log.e(TAG, "❌ File too large: $size bytes (max: $MAX_FILE_SIZE)")
-        val sizeMb = size / (1024 * 1024)
-        val maxMb = MAX_FILE_SIZE / (1024 * 1024)
+        val sizeMb = String.format("%.1f", size / (1024.0 * 1024.0))
+        val maxMb = String.format("%.1f", MAX_FILE_SIZE / (1024.0 * 1024.0))
         val text = "cannot send ${file.name}: file is too large (${sizeMb} MB, max $maxMb MB)"
         when {
             toPeerIDOrNull != null -> {
@@ -145,7 +158,8 @@ class MediaSendingManager(
     private suspend fun sendVoiceNoteAsync(
         toPeerIDOrNull: String?,
         channelOrNull: String?,
-        filePath: String
+        filePath: String,
+        existingMessageId: String? = null
     ) {
         try {
             val filePacket = withContext(mediaWorkDispatcher) {
@@ -159,18 +173,35 @@ class MediaSendingManager(
                     return@withContext null
                 }
 
+                // BLE-only private chats ride the slow radio, so the voice note is re-encoded to
+                // the low-bitrate tier (20 kbps -> 12 kbps, ~40% smaller payload) before sending.
+                // The original path is kept for the message and retries — a retry re-derives the
+                // cached transcode. Channels/public broadcasts reach every transport and stay at
+                // the standard tier. Transcode failures fall back to the original file.
+                val bleOnly = toPeerIDOrNull != null && PrivateMediaRecipientResolver
+                    .resolve(toPeerIDOrNull, meshService)
+                    ?.meshPeerID
+                    ?.let { meshService.isPeerBleOnly(it) } == true
+                val sendPath = if (bleOnly) {
+                    VoiceTranscoder.transcodeToLowerBitrate(filePath, VoiceRecorder.BLE_ONLY_VOICE_BITRATE)
+                        ?: filePath
+                } else {
+                    filePath
+                }
+                val sendFile = java.io.File(sendPath)
+
                 BitchatFilePacket(
                     fileName = file.name,
-                    fileSize = file.length(),
+                    fileSize = sendFile.length(),
                     mimeType = "audio/mp4",
-                    content = file.readBytes()
+                    content = sendFile.readBytes()
                 )
             } ?: return
 
             if (toPeerIDOrNull != null) {
-                sendPrivateFile(toPeerIDOrNull, filePacket, filePath, BitchatMessageType.Audio)
+                sendPrivateFile(toPeerIDOrNull, filePacket, filePath, BitchatMessageType.Audio, existingMessageId)
             } else {
-                sendPublicFile(channelOrNull, filePacket, filePath, BitchatMessageType.Audio)
+                sendPublicFile(channelOrNull, filePacket, filePath, BitchatMessageType.Audio, existingMessageId)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send voice note: ${e.message}")
@@ -224,7 +255,8 @@ class MediaSendingManager(
     private suspend fun sendImageNoteAsync(
         toPeerIDOrNull: String?,
         channelOrNull: String?,
-        filePath: String
+        filePath: String,
+        existingMessageId: String? = null
     ) {
         try {
             val filePacket = withContext(mediaWorkDispatcher) {
@@ -238,18 +270,26 @@ class MediaSendingManager(
                     return@withContext null
                 }
 
+                // Derive the real MIME type from the actual file so receivers save and label
+                // the image correctly (downscaled captures are JPEG, gallery picks may not be).
+                val mimeType = try {
+                    com.bitchat.android.features.file.FileUtils.getMimeTypeFromExtension(file.name)
+                } catch (_: Exception) {
+                    "image/jpeg"
+                }
+
                 BitchatFilePacket(
                     fileName = file.name,
                     fileSize = file.length(),
-                    mimeType = "image/jpeg",
+                    mimeType = mimeType,
                     content = file.readBytes()
                 )
             } ?: return
 
             if (toPeerIDOrNull != null) {
-                sendPrivateFile(toPeerIDOrNull, filePacket, filePath, BitchatMessageType.Image)
+                sendPrivateFile(toPeerIDOrNull, filePacket, filePath, BitchatMessageType.Image, existingMessageId)
             } else {
-                sendPublicFile(channelOrNull, filePacket, filePath, BitchatMessageType.Image)
+                sendPublicFile(channelOrNull, filePacket, filePath, BitchatMessageType.Image, existingMessageId)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Image send failed: ${e.message}", e)
@@ -268,7 +308,8 @@ class MediaSendingManager(
     private suspend fun sendFileNoteAsync(
         toPeerIDOrNull: String?,
         channelOrNull: String?,
-        filePath: String
+        filePath: String,
+        existingMessageId: String? = null
     ) {
         try {
             val filePacket = withContext(mediaWorkDispatcher) {
@@ -325,9 +366,9 @@ class MediaSendingManager(
             }
 
             if (toPeerIDOrNull != null) {
-                sendPrivateFile(toPeerIDOrNull, filePacket, filePath, messageType)
+                sendPrivateFile(toPeerIDOrNull, filePacket, filePath, messageType, existingMessageId)
             } else {
-                sendPublicFile(channelOrNull, filePacket, filePath, messageType)
+                sendPublicFile(channelOrNull, filePacket, filePath, messageType, existingMessageId)
             }
         } catch (e: Exception) {
             Log.e(TAG, "File send failed: ${e.message}", e)
@@ -341,7 +382,8 @@ class MediaSendingManager(
         toPeerID: String,
         filePacket: BitchatFilePacket,
         filePath: String,
-        messageType: BitchatMessageType
+        messageType: BitchatMessageType,
+        existingMessageId: String? = null
     ) {
         val payload = withContext(mediaWorkDispatcher) { filePacket.encode() }
             ?: run {
@@ -369,7 +411,8 @@ class MediaSendingManager(
             filePath = filePath,
             messageType = messageType,
             transferId = transferId,
-            allowLegacyFallback = false
+            allowLegacyFallback = false,
+            existingMessageId = existingMessageId
         )
         if (!reserveAutomaticPending(pending)) {
             addPrivateMediaSystemMessage(
@@ -402,7 +445,8 @@ class MediaSendingManager(
             filePath = pending.filePath,
             messageType = pending.messageType,
             transferId = pending.transferId,
-            allowLegacyFallback = true
+            allowLegacyFallback = true,
+            existingMessageId = pending.existingMessageId
         )
         if (!reserveAutomaticPending(automatic)) {
             addPrivateMediaSystemMessage(
@@ -508,7 +552,8 @@ class MediaSendingManager(
                     pending.recipientMeshPeerID,
                     pending.filePath,
                     pending.messageType,
-                    pending.transferId
+                    pending.transferId,
+                    pending.existingMessageId
                 )
             }
 
@@ -545,7 +590,8 @@ class MediaSendingManager(
                         pending.filePacket,
                         pending.filePath,
                         pending.messageType,
-                        pending.transferId
+                        pending.transferId,
+                        pending.existingMessageId
                     )
                     _legacyPrivateMediaConsent.value = request
                 }
@@ -712,55 +758,61 @@ class MediaSendingManager(
         recipientMeshPeerID: String,
         filePath: String,
         messageType: BitchatMessageType,
-        transferId: String
+        transferId: String,
+        existingMessageId: String? = null
     ) {
         if (preparation.transfer.transferId != transferId) {
             Log.e(TAG, "Prepared private-media transfer ID changed; send aborted")
             return
         }
 
-        val msg = BitchatMessage(
-            id = UUID.randomUUID().toString().uppercase(),
-            sender = state.getNicknameValue() ?: "me",
-            content = filePath,
-            type = messageType,
-            timestamp = Date(),
-            isRelay = false,
-            isPrivate = true,
-            recipientNickname = try {
-                meshService.getPeerNicknames()[recipientMeshPeerID]
-            } catch (_: Exception) {
-                null
-            },
-            senderPeerID = meshService.myPeerID
-        )
-
-        // Preparation already built and admitted the exact final packet. Map
-        // progress before commit so the first asynchronous event cannot race us.
-        if (!messageManager.addPrivateMessageDurably(conversationID, msg, forceRead = true)) {
-            Log.e(TAG, "Prepared private-media message could not be persisted; send aborted")
-            addPrivateMediaSystemMessage(
-                conversationID,
-                "Private media was not sent because the conversation could not be saved."
+        // A one-tap retry reuses the failed bubble: the message already exists in the
+        // conversation, so skip the durable echo and just re-arm its transfer tracking.
+        val msgId = existingMessageId ?: UUID.randomUUID().toString().uppercase()
+        if (existingMessageId == null) {
+            val msg = BitchatMessage(
+                id = msgId,
+                sender = state.getNicknameValue() ?: "me",
+                content = filePath,
+                type = messageType,
+                timestamp = Date(),
+                isRelay = false,
+                isPrivate = true,
+                recipientNickname = try {
+                    meshService.getPeerNicknames()[recipientMeshPeerID]
+                } catch (_: Exception) {
+                    null
+                },
+                senderPeerID = meshService.myPeerID
             )
-            return
+
+            // Preparation already built and admitted the exact final packet. Map
+            // progress before commit so the first asynchronous event cannot race us.
+            if (!messageManager.addPrivateMessageDurably(conversationID, msg, forceRead = true)) {
+                Log.e(TAG, "Prepared private-media message could not be persisted; send aborted")
+                addPrivateMediaSystemMessage(
+                    conversationID,
+                    "Private media was not sent because the conversation could not be saved."
+                )
+                return
+            }
         }
         synchronized(transferMessageMap) {
-            transferMessageMap[transferId] = msg.id
-            messageTransferMap[msg.id] = transferId
+            transferMessageMap[transferId] = msgId
+            messageTransferMap[msgId] = transferId
         }
         messageManager.updateMessageDeliveryStatus(
-            msg.id,
+            msgId,
             com.bitchat.android.model.DeliveryStatus.PartiallyDelivered(0, 100)
         )
 
         if (!preparation.transfer.commit()) {
             synchronized(transferMessageMap) {
                 transferMessageMap.remove(transferId)
-                messageTransferMap.remove(msg.id)
+                messageTransferMap.remove(msgId)
             }
             messageManager.updateMessageDeliveryStatus(
-                msg.id,
+                msgId,
                 com.bitchat.android.model.DeliveryStatus.Failed(
                     "Prepared transfer could not be committed"
                 )
@@ -781,7 +833,8 @@ class MediaSendingManager(
         channelOrNull: String?,
         filePacket: BitchatFilePacket,
         filePath: String,
-        messageType: BitchatMessageType
+        messageType: BitchatMessageType,
+        existingMessageId: String? = null
     ) {
         val payload = withContext(mediaWorkDispatcher) { filePacket.encode() }
             ?: run {
@@ -793,36 +846,146 @@ class MediaSendingManager(
             sha256Hex(payload)
         }
 
-        val message = BitchatMessage(
-            id = java.util.UUID.randomUUID().toString().uppercase(), // Generate unique ID for each message
-            sender = state.getNicknameValue() ?: meshService.myPeerID,
-            content = filePath,
-            type = messageType,
-            timestamp = Date(),
-            isRelay = false,
-            senderPeerID = meshService.myPeerID,
-            channel = channelOrNull
-        )
-        
-        if (!channelOrNull.isNullOrBlank()) {
-            channelManager.addChannelMessage(channelOrNull, message, meshService.myPeerID)
-        } else {
-            messageManager.addMessage(message)
+        // A one-tap retry reuses the failed bubble: the message already exists in the
+        // conversation, so skip the local echo and re-arm its transfer tracking under the
+        // same id.
+        val msgId = existingMessageId ?: java.util.UUID.randomUUID().toString().uppercase()
+        if (existingMessageId == null) {
+            val message = BitchatMessage(
+                id = msgId, // Generate unique ID for each message
+                sender = state.getNicknameValue() ?: meshService.myPeerID,
+                content = filePath,
+                type = messageType,
+                timestamp = Date(),
+                isRelay = false,
+                senderPeerID = meshService.myPeerID,
+                channel = channelOrNull
+            )
+
+            if (!channelOrNull.isNullOrBlank()) {
+                channelManager.addChannelMessage(channelOrNull, message, meshService.myPeerID)
+            } else {
+                messageManager.addMessage(message)
+            }
         }
-        
+
         synchronized(transferMessageMap) {
-            transferMessageMap[transferId] = message.id
-            messageTransferMap[message.id] = transferId
+            transferMessageMap[transferId] = msgId
+            messageTransferMap[msgId] = transferId
         }
-        
+
         // Seed progress so animations start immediately
         messageManager.updateMessageDeliveryStatus(
-            message.id,
+            msgId,
             com.bitchat.android.model.DeliveryStatus.PartiallyDelivered(0, 100)
         )
-        
+
         withContext(mediaWorkDispatcher) {
             meshService.sendFileBroadcast(filePacket)
+        }
+    }
+
+    /**
+     * One-tap retry for a failed media bubble (image, voice note, or file). Re-sends the
+     * original file into the same conversation, reusing the existing bubble instead of creating
+     * a duplicate, and immediately clears the failed state so the ⚠ disappears.
+     */
+    fun retryMediaSend(messageId: String) {
+        scope.launch {
+            val context = resolveRetryContext(messageId) ?: return@launch
+            val file = java.io.File(context.filePath)
+            if (!file.exists()) {
+                postRetryContextSystemMessage(
+                    context,
+                    "Cannot resend this message: the original file is no longer available on this device."
+                )
+                return@launch
+            }
+            // For private sends, fail fast with a clear message when there is definitely no
+            // route, so the user is not left waiting on a send that can never start.
+            if (context.peerIDOrNull != null) {
+                val recipient = PrivateMediaRecipientResolver.resolve(context.peerIDOrNull, meshService)
+                if (recipient == null) {
+                    postRetryContextSystemMessage(
+                        context,
+                        "Cannot resend this message: this conversation has no active mesh route."
+                    )
+                    return@launch
+                }
+            }
+            // Note: the bubble's delivery status is left untouched here. The send pipeline seeds
+            // PartiallyDelivered at commit time (sendPublicFile / commitPreparedPrivateFile), so
+            // any early-abort path (file gone, oversized, consent canceled, reservation conflict)
+            // leaves the bubble truthfully Failed instead of stranding it in an in-flight limbo.
+            when (context.message.type) {
+                BitchatMessageType.Image -> sendImageNoteAsync(
+                    context.peerIDOrNull,
+                    context.channelOrNull,
+                    context.filePath,
+                    existingMessageId = messageId
+                )
+                BitchatMessageType.Audio -> sendVoiceNoteAsync(
+                    context.peerIDOrNull,
+                    context.channelOrNull,
+                    context.filePath,
+                    existingMessageId = messageId
+                )
+                else -> sendFileNoteAsync(
+                    context.peerIDOrNull,
+                    context.channelOrNull,
+                    context.filePath,
+                    existingMessageId = messageId
+                )
+            }
+        }
+    }
+
+    /**
+     * Locate a message by id and figure out which conversation it belongs to, so a retry can
+     * resend into exactly the same place it originally went.
+     */
+    private fun resolveRetryContext(messageId: String): RetrySendContext? {
+        // Private conversations: the map key is the canonical conversation ID and private
+        // media messages live under it.
+        state.getPrivateChatsValue().forEach { (conversationID, list) ->
+            list.firstOrNull { it.id == messageId }?.let { msg ->
+                return RetrySendContext(msg, msg.content.trim(), conversationID, null)
+            }
+        }
+        // Channels: the map key is the channel tag.
+        state.getChannelMessagesValue().forEach { (channel, list) ->
+            list.firstOrNull { it.id == messageId }?.let { msg ->
+                return RetrySendContext(msg, msg.content.trim(), null, channel)
+            }
+        }
+        // Public timeline (may still carry a channel tag).
+        state.getMessagesValue().firstOrNull { it.id == messageId }?.let { msg ->
+            return RetrySendContext(msg, msg.content.trim(), null, msg.channel)
+        }
+        return null
+    }
+
+    private fun postRetryContextSystemMessage(context: RetrySendContext, text: String) {
+        when {
+            context.peerIDOrNull != null -> messageManager.addPrivateMessageNoUnread(
+                context.peerIDOrNull,
+                BitchatMessage(
+                    sender = "system",
+                    content = text,
+                    timestamp = Date(),
+                    isRelay = false
+                )
+            )
+            context.channelOrNull != null -> messageManager.addChannelMessage(
+                context.channelOrNull,
+                BitchatMessage(
+                    sender = "system",
+                    content = text,
+                    timestamp = Date(),
+                    isRelay = false
+                )
+            )
+            else -> messageManager.addSystemMessage(text)
         }
     }
 

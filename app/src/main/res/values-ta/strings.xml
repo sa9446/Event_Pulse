@@ -193,6 +193,7 @@
   <string name="cd_file">கோப்பு</string>
   <string name="cd_image">படம்</string>
   <string name="cd_cancel">ரத்து செய்</string>
+  <string name="cd_retry">மீண்டும் அனுப்பு</string>
   <string name="cd_link">இணைப்பு</string>
   <string name="cd_record_voice">குரல் குறிப்பை பதிவு செய்</string>
   <string name="cd_pick_media">மீடியாவைத் தேர்ந்தெடு</string>

@@ -196,6 +196,12 @@
   <string name="about_system">System</string>
   <string name="about_light">Light</string>
   <string name="about_dark">Dark</string>
+  <string name="about_post_quantum_title">Post-Quantum Encryption</string>
+  <string name="about_post_quantum_desc">Hybrid ML-KEM-768 + X25519 handshake (NIST FIPS 203). Keep on for quantum-resistant sessions; turning it off uses classic X25519 everywhere.</string>
+  <string name="about_block_classic_title">Block non-quantum sessions</string>
+  <string name="about_block_classic_desc">Refuse classic X25519 handshakes so every session is post-quantum. Turn off to allow older builds to connect.</string>
+  <string name="post_quantum_session_label">Post-quantum session (ML-KEM-768)</string>
+  <string name="cd_encrypted_post_quantum">Encrypted with a post-quantum ML-KEM session</string>
   <string name="about_pow">Proof of Work</string>
   <string name="about_pow_off">PoW Off</string>
   <string name="about_pow_on">PoW On</string>
@@ -322,6 +328,7 @@
   <string name="cd_file">File</string>
   <string name="cd_image">Image</string>
   <string name="cd_cancel">Cancel</string>
+  <string name="cd_retry">Retry send</string>
   <string name="cd_link">Link</string>
   <string name="cd_record_voice">Record voice note</string>
   <string name="cd_pick_media">Pick media</string>

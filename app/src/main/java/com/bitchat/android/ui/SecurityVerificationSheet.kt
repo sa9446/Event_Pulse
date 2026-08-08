@@ -69,6 +69,7 @@ fun SecurityVerificationSheet(
     val peerID by viewModel.selectedPrivateChatPeer.collectAsStateWithLifecycle()
     val verifiedFingerprints by viewModel.verifiedFingerprints.collectAsStateWithLifecycle()
     val peerSessionStates by viewModel.peerSessionStates.collectAsStateWithLifecycle()
+    val peerPostQuantum by viewModel.peerPostQuantum.collectAsStateWithLifecycle()
 
     val colorScheme = MaterialTheme.colorScheme
     val accent = colorScheme.primary
@@ -119,6 +120,20 @@ fun SecurityVerificationSheet(
                     boxColor = boxColor,
                     statusInfo = statusInfo
                 )
+
+                // Hybrid ML-KEM sessions get an explicit label so the user can distinguish a
+                // post-quantum handshake from the classic X25519 fallback.
+                if (
+                    sessionState == "established" &&
+                    listOfNotNull(activeMeshPeerID, selectedPeerID).any { peerPostQuantum[it] == true }
+                ) {
+                    VerificationStatusRow(
+                        icon = Icons.Filled.Lock,
+                        iconTint = accent,
+                        text = stringResource(R.string.post_quantum_session_label),
+                        textTint = accent
+                    )
+                }
 
                 FingerprintBlock(
                     title = stringResource(R.string.fingerprint_their),

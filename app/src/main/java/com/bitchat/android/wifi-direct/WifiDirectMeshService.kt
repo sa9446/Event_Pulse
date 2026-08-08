@@ -763,6 +763,8 @@ class WifiDirectMeshService(private val context: Context) : MeshService, Transpo
 
     override fun getSessionState(peerID: String) = meshCore.getSessionState(peerID)
 
+    override fun isSessionPostQuantum(peerID: String) = meshCore.isSessionPostQuantum(peerID)
+
     override fun initiateNoiseHandshake(peerID: String) = meshCore.initiateNoiseHandshake(peerID)
 
     override fun getPeerFingerprint(peerID: String): String? = meshCore.getPeerFingerprint(peerID)

@@ -11,16 +11,72 @@ import java.io.FileOutputStream
 import java.io.InputStream
 
 object ImageUtils {
-    fun downscaleAndSaveToAppFiles(context: Context, uri: Uri, maxDim: Int = 512, quality: Int = 85): String? {
+
+    /** Longest-side bound for outgoing images on standard transports (Wi-Fi/Nostr). */
+    const val DEFAULT_IMAGE_MAX_DIM = 512
+
+    /**
+     * Longest-side bound for outgoing images to BLE-only peers. The smaller payload rides
+     * the slow BLE radio faster and is far less likely to fail mid-transfer.
+     */
+    const val BLE_ONLY_IMAGE_MAX_DIM = 384
+
+    /** JPEG quality for outgoing images on standard transports (Wi-Fi/Nostr). */
+    const val DEFAULT_IMAGE_QUALITY = 85
+
+    /**
+     * JPEG quality for outgoing images to BLE-only peers. Lower quality shrinks the payload
+     * further (alongside the 384px dimension bound) so it rides the slow BLE radio faster and
+     * is less likely to fail mid-transfer.
+     */
+    const val BLE_ONLY_IMAGE_QUALITY = 75
+
+    /**
+     * Compute a power-of-two sample size that bounds the decoded bitmap to roughly
+     * [maxDim] on its longest side. Reading bounds first (inJustDecodeBounds) means a
+     * 48 MP camera photo is never fully decoded into memory just to be shrunk.
+     */
+    private fun sampleSizeFor(width: Int, height: Int, maxDim: Int): Int {
+        if (width <= 0 || height <= 0) return 1
+        var sample = 1
+        var w = width
+        var h = height
+        while (maxOf(w, h) / 2 >= maxDim && sample < 64) {
+            sample *= 2
+            w /= 2
+            h /= 2
+        }
+        return sample
+    }
+
+    private fun decodeSampledFromPath(path: String, maxDim: Int): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        val opts = BitmapFactory.Options().apply {
+            inSampleSize = sampleSizeFor(bounds.outWidth, bounds.outHeight, maxDim)
+        }
+        return BitmapFactory.decodeFile(path, opts)
+    }
+
+    fun downscaleAndSaveToAppFiles(context: Context, uri: Uri, maxDim: Int = DEFAULT_IMAGE_MAX_DIM, quality: Int = DEFAULT_IMAGE_QUALITY): String? {
         return try {
             val resolver = context.contentResolver
             val exifRotation = resolver.openInputStream(uri)?.use { getRotationDegreesFromExif(it) } ?: 0
 
-            // Reopen for decode as the previous stream is consumed
-            val input = resolver.openInputStream(uri) ?: return null
-            val original = BitmapFactory.decodeStream(input)
-            input.close()
-            original ?: return null
+            // Bounds pass on its own stream (decodeStream consumes whatever it reads).
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+            // Sampled decode on a fresh stream keeps memory bounded for full-resolution
+            // gallery photos and never reads a partially-consumed stream.
+            val opts = BitmapFactory.Options().apply {
+                inSampleSize = sampleSizeFor(bounds.outWidth, bounds.outHeight, maxDim)
+            }
+            val original = resolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it, null, opts)
+            } ?: return null
 
             val oriented = if (exifRotation != 0) rotateBitmap(original, exifRotation) else original
 
@@ -43,9 +99,9 @@ object ImageUtils {
         }
     }
 
-    fun downscalePathAndSaveToAppFiles(context: Context, path: String, maxDim: Int = 512, quality: Int = 85): String? {
+    fun downscalePathAndSaveToAppFiles(context: Context, path: String, maxDim: Int = DEFAULT_IMAGE_MAX_DIM, quality: Int = DEFAULT_IMAGE_QUALITY): String? {
         return try {
-            val original = BitmapFactory.decodeFile(path) ?: return null
+            val original = decodeSampledFromPath(path, maxDim) ?: return null
             val exifRotation = getRotationDegreesFromExif(path)
             val oriented = if (exifRotation != 0) rotateBitmap(original, exifRotation) else original
 

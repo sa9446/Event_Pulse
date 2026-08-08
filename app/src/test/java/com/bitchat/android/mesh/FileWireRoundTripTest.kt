@@ -49,9 +49,9 @@ class FileWireRoundTripTest {
 
     @Test
     fun `large file survives fragmented wire round trip`() {
-        // ~50 KB of pseudo-random content forces many fragments (staying under the
-        // receiver's MAX_FRAGMENTS_PER_ID = 256 cap); any truncation in
-        // chunking/reassembly would surface here.
+        // ~50 KB of pseudo-random content forces many fragments (well under Android's
+        // MAX_FRAGMENTS_PER_ID = 10_000 reassembly cap; upstream iOS peers cap at 256, a
+        // peer-side limit); any truncation in chunking/reassembly would surface here.
         val content = ByteArray(50_000) { random.nextInt(256).toByte() }
         val original = BitchatFilePacket(
             fileName = "photo.webp",

@@ -51,6 +51,12 @@ class NoiseEncryptionService(private val context: Context) {
     // Callbacks
     var onPeerAuthenticated: ((String, String) -> Unit)? = null // (peerID, fingerprint)
     var onHandshakeRequired: ((String) -> Unit)? = null // peerID needs handshake
+
+    /**
+     * Invoked when a post-quantum handshake timed out and was re-initiated once with the classic
+     * X25519 protocol. The message-1 payload must be delivered to the peer like any handshake.
+     */
+    var onClassicFallbackMessage: ((String, ByteArray) -> Unit)? = null
     
     init {
         // Initialize identity state manager for persistent storage
@@ -71,11 +77,40 @@ class NoiseEncryptionService(private val context: Context) {
     private fun initializeSessionManager() {
         // Create new session manager with current keys
         val localPeerID = calculateFingerprint(staticIdentityPublicKey).take(16)
-        sessionManager = NoiseSessionManager(staticIdentityPrivateKey, staticIdentityPublicKey, localPeerID)
+        sessionManager = NoiseSessionManager(
+            staticIdentityPrivateKey,
+            staticIdentityPublicKey,
+            localPeerID,
+            // Read the post-quantum toggle fresh per session so new handshakes pick it up
+            // immediately (responders additionally auto-negotiate classic peers by message size).
+            postQuantumProvider = {
+                try {
+                    com.bitchat.android.service.MeshServicePreferences.init(context)
+                    com.bitchat.android.service.MeshServicePreferences.isPostQuantumEnabled(true)
+                } catch (_: Exception) {
+                    true
+                }
+            },
+            // Post-quantum-only mode (default on): while post-quantum is enabled, classic
+            // X25519 handshakes are refused outright — no initiator downgrade on timeout, no
+            // responder fallback — so every session is genuinely quantum-resistant. Turn the
+            // block off (or disable post-quantum entirely) to allow legacy classic-only builds.
+            blockClassicProvider = {
+                try {
+                    com.bitchat.android.service.MeshServicePreferences.init(context)
+                    com.bitchat.android.service.MeshServicePreferences.isClassicHandshakeBlocked(true)
+                } catch (_: Exception) {
+                    true
+                }
+            }
+        )
         
         // Set up session callbacks
         sessionManager.onSessionEstablished = { peerID, remoteStaticKey ->
             handleSessionEstablished(peerID, remoteStaticKey)
+        }
+        sessionManager.onClassicFallbackInitiated = { peerID, message1 ->
+            onClassicFallbackMessage?.invoke(peerID, message1)
         }
         
         // Ensure any other callbacks are wired if needed
@@ -231,6 +266,14 @@ class NoiseEncryptionService(private val context: Context) {
      */
     fun getSessionState(peerID: String): NoiseSession.NoiseSessionState {
         return sessionManager.getSessionState(peerID)
+    }
+
+    /**
+     * Whether the established session with this peer used the hybrid ML-KEM (post-quantum)
+     * protocol rather than the classic X25519 fallback.
+     */
+    fun isSessionPostQuantum(peerID: String): Boolean {
+        return sessionManager.isSessionPostQuantum(peerID)
     }
     
     // MARK: - Encryption/Decryption

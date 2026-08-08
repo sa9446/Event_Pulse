@@ -139,6 +139,7 @@
     <string name="cd_file">Fil</string>
     <string name="cd_image">Bild</string>
     <string name="cd_cancel">Avbryt</string>
+    <string name="cd_retry">Skicka igen</string>
     <string name="cd_link">Länk</string>
     <string name="cd_pick_media">Välj media</string>
     <string name="cd_record_voice">Spela in röstanteckning</string>

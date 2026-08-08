@@ -1688,6 +1688,7 @@ fun PrivateChatSheet(
     val connectedPeers by viewModel.connectedPeers.collectAsStateWithLifecycle()
     val peerDirectMap by viewModel.peerDirect.collectAsStateWithLifecycle()
     val peerSessionStates by viewModel.peerSessionStates.collectAsStateWithLifecycle()
+    val peerPostQuantum by viewModel.peerPostQuantum.collectAsStateWithLifecycle()
     val favoritePeers by viewModel.favoritePeers.collectAsStateWithLifecycle()
     val peerFavoritedUs by viewModel.peerFavoritedUs.collectAsStateWithLifecycle()
     val peerFingerprints by viewModel.peerFingerprints.collectAsStateWithLifecycle()
@@ -1717,6 +1718,27 @@ fun PrivateChatSheet(
     val isConnected = activeMeshPeerID?.let { connectedPeers.contains(it) } == true || connectedPeers.contains(peerID) || isDirect
     val isNostrReachableFavorite =
         !isConnected && favoriteRelationship?.isMutual == true && favoriteRelationship.peerNostrPublicKey != null
+
+    // Images to a BLE-only peer compress harder (384px vs 512px): the smaller payload rides
+    // the slow BLE radio faster and is far less likely to fail mid-transfer. Nostr/offline
+    // peers and any peer with a Wi-Fi link keep the standard resolution. Computed inline
+    // (not remembered) so a Wi-Fi link arriving while the sheet is open re-evaluates on the
+    // next recomposition instead of keeping the BLE-only tier.
+    val isBleOnlyTier = viewModel.isPeerBleOnly(activeMeshPeerID ?: peerID)
+    val imageMaxDim = if (isBleOnlyTier) {
+        com.bitchat.android.features.media.ImageUtils.BLE_ONLY_IMAGE_MAX_DIM
+    } else {
+        com.bitchat.android.features.media.ImageUtils.DEFAULT_IMAGE_MAX_DIM
+    }
+
+    // JPEG quality follows the same tier: BLE-only peers get 75 instead of 85 to shrink the
+    // payload further on the slow radio (dimension + quality together beat either alone).
+    // Derived from the single [isBleOnlyTier] check so the two tiers can never disagree.
+    val imageMaxQuality = if (isBleOnlyTier) {
+        com.bitchat.android.features.media.ImageUtils.BLE_ONLY_IMAGE_QUALITY
+    } else {
+        com.bitchat.android.features.media.ImageUtils.DEFAULT_IMAGE_QUALITY
+    }
 
     // Compute display name and title text reactively
     val displayName = remember(peerID, peerNicknames, favoriteRelationship) {
@@ -1748,6 +1770,9 @@ fun PrivateChatSheet(
         activeMeshPeerID = activeMeshPeerID,
         peerSessionStates = peerSessionStates
     )
+    // A post-quantum badge shows when the live mesh session for this conversation negotiated
+    // the hybrid ML-KEM protocol (either via the canonical mesh peer ID or the conversation key).
+    val isPostQuantum = listOfNotNull(activeMeshPeerID, peerID).any { peerPostQuantum[it] == true }
     val fingerprint = activeMeshPeerID?.let { peerFingerprints[it] }
         ?: peerFingerprints[peerID]
         ?: ContactIdentityResolver.fingerprintFromContactConversationId(peerID)
@@ -1835,6 +1860,7 @@ fun PrivateChatSheet(
                         onNicknameClick = { /* handle mention */ },
                         onMessageLongPress = { /* handle long press */ },
                         onCancelTransfer = { msg -> viewModel.cancelMediaSend(msg.id) },
+                        onRetrySend = { msg -> viewModel.retryMediaSend(msg.id) },
                         onImageClick = { _, _, _ -> /* handle image click */ }
                     )
 
@@ -1886,7 +1912,9 @@ fun PrivateChatSheet(
                         currentChannel = null,
                         nickname = nickname,
                         colorScheme = colorScheme,
-                        showMediaButtons = true
+                        showMediaButtons = true,
+                        maxImageDim = imageMaxDim,
+                        maxImageQuality = imageMaxQuality
                     )
                 }
 
@@ -1962,6 +1990,7 @@ fun PrivateChatSheet(
                                 Box(contentAlignment = Alignment.Center) {
                                     NoiseSessionIcon(
                                         sessionState = sessionState,
+                                        isPostQuantum = isPostQuantum,
                                         modifier = Modifier.size(HeaderIconSize)
                                     )
                                 }

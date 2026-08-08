@@ -150,6 +150,7 @@
     <string name="cd_file">फ़ाइल</string>
     <string name="cd_image">छवि</string>
     <string name="cd_cancel">रद्द करें</string>
+    <string name="cd_retry">फिर से भेजें</string>
     <string name="cd_link">लिंक</string>
     <string name="cd_pick_media">मीडिया चुनें</string>
     <string name="cd_pick_file">फ़ाइल चुनें</string>
