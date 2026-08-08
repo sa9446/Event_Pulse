@@ -152,6 +152,15 @@ jobs:
             ~/.gradle/wrapper
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
 
+      - name: Check locale key parity
+        # Every locale strings.xml must mirror the keys in values/strings.xml.
+        # Pre-existing drift is tracked in tools/locale-keys-baseline.json; the
+        # check fails only on NEW drift (regenerate with --update-baseline after
+        # a translation batch catches the gap up).
+        run: |
+          python3 tools/check_locale_keys.py
+          python3 -m unittest tools.test_check_locale_keys
+
       - name: Run lint
         run: ./gradlew lint --build-cache --no-daemon
 

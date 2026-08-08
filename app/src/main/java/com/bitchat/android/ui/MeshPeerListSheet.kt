@@ -1,9 +1,15 @@
 package com.bitchat.android.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
+import androidx.core.content.ContextCompat
+import com.bitchat.android.calls.CallManager
 import com.bitchat.android.ui.theme.BitchatFontFamily
 import com.eventpulse.mesh.R
 import android.text.format.DateUtils
@@ -1832,6 +1838,40 @@ fun PrivateChatSheet(
         skipPartiallyExpanded = true
     )
 
+    // ── Real-time calls ──────────────────────────────────────────────────────
+    // Voice/video calls need RECORD_AUDIO (+CAMERA for video) and a Wi-Fi link; the CallManager
+    // is the process-wide coordinator and reports a notice when the peer is BLE-only.
+    var pendingVideoCall by remember { mutableStateOf(false) }
+    val callContext = LocalContext.current
+    val callPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val audioOk = results[Manifest.permission.RECORD_AUDIO] == true
+        val cameraOk = !pendingVideoCall || results[Manifest.permission.CAMERA] == true
+        val target = activeMeshPeerID ?: peerID
+        if (audioOk && cameraOk) {
+            CallManager.startCall(target, titleText, pendingVideoCall)
+        }
+        pendingVideoCall = false
+    }
+
+    fun requestCallPermissions(video: Boolean) {
+        val missing = buildList {
+            if (ContextCompat.checkSelfPermission(callContext, Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED
+            ) add(Manifest.permission.RECORD_AUDIO)
+            if (video && ContextCompat.checkSelfPermission(callContext, Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED
+            ) add(Manifest.permission.CAMERA)
+        }
+        pendingVideoCall = video
+        if (missing.isEmpty()) {
+            CallManager.startCall(activeMeshPeerID ?: peerID, titleText, video)
+        } else {
+            callPermissionLauncher.launch(missing.toTypedArray())
+        }
+    }
+
     if (isPresented) {
         BitchatBottomSheet(
             onDismissRequest = onDismiss,
@@ -1965,6 +2005,33 @@ fun PrivateChatSheet(
                                     },
                                 tint = favoriteStarTint
                             )
+                        }
+
+                        // Real-time calls ride the high-bandwidth Wi-Fi mesh (BLE is too slow for
+                        // live media); only offer them for mesh peers, not Nostr-only identities.
+                        if (!isNostrPeer && !isNostrReachableFavorite) {
+                            ConversationHeaderAction(
+                                onClick = { requestCallPermissions(video = false) },
+                                contentDescription = stringResource(R.string.cd_voice_call)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Call,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(HeaderIconSize),
+                                    tint = colorScheme.primary
+                                )
+                            }
+                            ConversationHeaderAction(
+                                onClick = { requestCallPermissions(video = true) },
+                                contentDescription = stringResource(R.string.cd_video_call)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Videocam,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(HeaderIconSize),
+                                    tint = colorScheme.primary
+                                )
+                            }
                         }
 
                         if (isVerified) {

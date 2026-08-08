@@ -438,6 +438,19 @@ class MeshCore(
             override fun onVerifyResponseReceived(peerID: String, payload: ByteArray, timestampMs: Long) {
                 delegate?.didReceiveVerifyResponse(peerID, payload, timestampMs)
             }
+
+            override fun onCallSignalReceived(
+                peerID: String,
+                signalType: NoisePayloadType,
+                payload: ByteArray,
+                timestampMs: Long
+            ) {
+                delegate?.didReceiveCallSignal(peerID, signalType, payload, timestampMs)
+            }
+
+            override fun onCallMediaReceived(peerID: String, payload: ByteArray) {
+                delegate?.didReceiveCallMedia(peerID, payload)
+            }
         }
 
         packetProcessor.delegate = object : PacketProcessorDelegate {
@@ -467,6 +480,10 @@ class MeshCore(
 
             override fun handleNoiseEncrypted(routed: RoutedPacket): Boolean {
                 return runBlocking { messageHandler.handleNoiseEncrypted(routed) }
+            }
+
+            override fun handleCallMedia(routed: RoutedPacket): Boolean {
+                return runBlocking { messageHandler.handleCallMedia(routed) }
             }
 
             override suspend fun handleAnnounce(routed: RoutedPacket): Boolean {
@@ -759,6 +776,51 @@ class MeshCore(
             data = tlv
         )
         sendNoisePayloadToPeer(payload, peerID)
+    }
+
+    /**
+     * Send a real-time call control signal as an encrypted Noise payload to [recipientPeerID].
+     */
+    fun sendCallSignal(peerID: String, signalType: NoisePayloadType, payload: ByteArray) {
+        sendNoisePayloadToPeer(NoisePayload(signalType, payload), peerID)
+    }
+
+    /**
+     * Send one real-time call media frame to [recipientPeerID] as a v2 CALL_MEDIA packet over
+     * this transport's direct peer socket (bypassing the 469-byte fragmenter — real-time media
+     * cannot tolerate 20 ms inter-fragment gaps). No signature: media frames are best-effort
+     * and the shared SecurityManager does not require signatures for this type.
+     */
+    fun sendCallMedia(peerID: String, frame: ByteArray): Boolean {
+        if (frame.isEmpty()) return false
+        val packet = BitchatPacket(
+            version = 2u,
+            type = MessageType.CALL_MEDIA.value,
+            senderID = MeshPacketUtils.hexStringToByteArray(myPeerID),
+            recipientID = MeshPacketUtils.hexStringToByteArray(peerID),
+            timestamp = nextMediaTimestamp(),
+            payload = frame,
+            ttl = maxTtl
+        )
+        return transport.sendPacketToPeer(peerID, packet)
+    }
+
+    /**
+     * Monotonically increasing timestamp for media frames so the SecurityManager's 5-minute
+     * duplicate detector never collapses two same-millisecond frames (e.g. silent audio) into
+     * one dedup key. Companion-level so transports that write CALL_MEDIA frames directly to a
+     * peer socket (bypassing the fragmenter) share the same sequence.
+     */
+    companion object {
+        private val lastMediaTimestamp = java.util.concurrent.atomic.AtomicLong(0L)
+        @JvmStatic
+        fun nextMediaTimestamp(): ULong {
+            var now = System.currentTimeMillis()
+            val prev = lastMediaTimestamp.get()
+            if (now <= prev) now = prev + 1
+            lastMediaTimestamp.set(now)
+            return now.toULong()
+        }
     }
 
     private fun sendNoisePayloadToPeer(payload: NoisePayload, recipientPeerID: String) {

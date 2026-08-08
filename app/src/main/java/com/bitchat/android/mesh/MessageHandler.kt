@@ -187,6 +187,12 @@ class MessageHandler(private val myPeerID: String, private val appContext: andro
                 com.bitchat.android.model.NoisePayloadType.VERIFY_RESPONSE -> {
                     delegate?.onVerifyResponseReceived(peerID, noisePayload.data, packet.timestamp.toLong())
                 }
+                com.bitchat.android.model.NoisePayloadType.CALL_INVITE,
+                com.bitchat.android.model.NoisePayloadType.CALL_ACCEPT,
+                com.bitchat.android.model.NoisePayloadType.CALL_REJECT,
+                com.bitchat.android.model.NoisePayloadType.CALL_END -> {
+                    delegate?.onCallSignalReceived(peerID, noisePayload.type, noisePayload.data, packet.timestamp.toLong())
+                }
             }
             
         } catch (e: Exception) {
@@ -219,6 +225,20 @@ class MessageHandler(private val myPeerID: String, private val appContext: andro
         }
     }
     
+    /**
+     * Handle an incoming real-time call media frame (addressed CALL_MEDIA packet).
+     * Payload is passed straight to the delegate; call media is best-effort and
+     * deliberately does not generate delivery ACKs or store-and-forward.
+     */
+    suspend fun handleCallMedia(routed: RoutedPacket): Boolean {
+        val packet = routed.packet
+        val peerID = routed.peerID ?: "unknown"
+        if (peerID == myPeerID) return true
+        if (packet.payload.isEmpty()) return true
+        delegate?.onCallMediaReceived(peerID, packet.payload)
+        return true
+    }
+
     /**
      * Send delivery ACK for a received private message - exactly like iOS
      */
@@ -741,4 +761,8 @@ interface MessageHandlerDelegate {
     fun onReadReceiptReceived(messageID: String, peerID: String)
     fun onVerifyChallengeReceived(peerID: String, payload: ByteArray, timestampMs: Long)
     fun onVerifyResponseReceived(peerID: String, payload: ByteArray, timestampMs: Long)
+    /** Real-time call control signal (CALL_INVITE/ACCEPT/REJECT/END). */
+    fun onCallSignalReceived(peerID: String, signalType: com.bitchat.android.model.NoisePayloadType, payload: ByteArray, timestampMs: Long) {}
+    /** Real-time call media frame (raw CALL_MEDIA payload). */
+    fun onCallMediaReceived(peerID: String, payload: ByteArray) {}
 }

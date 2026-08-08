@@ -243,6 +243,12 @@ class NostrDirectMessageHandler(
             NoisePayloadType.VERIFY_CHALLENGE,
             NoisePayloadType.VERIFY_RESPONSE,
             NoisePayloadType.PEER_STATE -> Unit // Peer state is bound to a live mesh Noise generation.
+            // Real-time call control is a local mesh concern; Nostr is store-and-forward, so
+            // call signals arriving gift-wrapped are stale by construction and dropped here.
+            NoisePayloadType.CALL_INVITE,
+            NoisePayloadType.CALL_ACCEPT,
+            NoisePayloadType.CALL_REJECT,
+            NoisePayloadType.CALL_END -> Unit
         }
     }
 

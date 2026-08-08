@@ -1,6 +1,7 @@
 package com.bitchat.android.mesh
 
 import com.bitchat.android.model.BitchatFilePacket
+import com.bitchat.android.model.NoisePayloadType
 
 /**
  * Transport-agnostic mesh service API for UI and routing layers.
@@ -19,6 +20,25 @@ interface MeshService {
     fun sendFavoriteNotification(peerID: String, isFavorite: Boolean) {}
     fun sendVerifyChallenge(peerID: String, noiseKeyHex: String, nonceA: ByteArray)
     fun sendVerifyResponse(peerID: String, noiseKeyHex: String, nonceA: ByteArray)
+
+    /**
+     * Send a real-time call control signal (CALL_INVITE/ACCEPT/REJECT/END) as an encrypted
+     * Noise payload. Defaults to a no-op; transports that can reach the peer override it.
+     */
+    fun sendCallSignal(peerID: String, signalType: NoisePayloadType, payload: ByteArray) {}
+
+    /**
+     * Send one real-time call media frame to [peerID]. Returns true when the frame was written
+     * to a transport socket. Defaults to false (unsupported — e.g. BLE-only transports).
+     */
+    fun sendCallMedia(peerID: String, frame: ByteArray): Boolean = false
+
+    /**
+     * True when real-time calling is viable for [peerID] (a high-bandwidth Wi-Fi link exists).
+     * Defaults to false; the unified mesh service is the authority.
+     */
+    fun isPeerCallCapable(peerID: String): Boolean = false
+
     fun sendFileBroadcast(file: BitchatFilePacket)
     fun sendFilePrivate(recipientPeerID: String, file: BitchatFilePacket)
     fun prepareFilePrivate(

@@ -1401,6 +1401,49 @@ class WifiAwareMeshService(private val context: Context) : MeshService, Transpor
         meshCore.sendVerifyResponse(peerID, noiseKeyHex, nonceA)
     }
 
+    override fun sendCallSignal(peerID: String, signalType: com.bitchat.android.model.NoisePayloadType, payload: ByteArray) {
+        meshCore.sendCallSignal(peerID, signalType, payload)
+    }
+
+    /**
+     * Write one CALL_MEDIA frame straight to the peer's Aware socket, bypassing the 469-byte
+     * fragmenter (20 ms inter-fragment gaps make real-time media impossible). The peer's read
+     * loop treats it as an ordinary framed BitchatPacket, so no transport changes are needed
+     * on the receiving side. Unframed frames must stay under the 64 KB SyncedSocket limit.
+     */
+    override fun sendCallMedia(peerID: String, frame: ByteArray): Boolean {
+        if (frame.isEmpty()) return false
+        val packet = BitchatPacket(
+            version = 2u,
+            type = MessageType.CALL_MEDIA.value,
+            senderID = com.bitchat.android.mesh.MeshPacketUtils.hexStringToByteArray(myPeerID),
+            recipientID = com.bitchat.android.mesh.MeshPacketUtils.hexStringToByteArray(peerID),
+            timestamp = MeshCore.nextMediaTimestamp(),
+            payload = frame,
+            ttl = MAX_TTL
+        )
+        val data = packet.toBinaryData() ?: return false
+        // SyncedSocket.read() throws on frames > 64 KB and the peer read loop then drops the
+        // whole connection. MessagePadding can round the encoded frame up, so verify the final
+        // encoded size and drop the frame rather than kill the link.
+        if (data.size > 64 * 1024 - 1) {
+            Log.w(TAG, "Dropping CALL_MEDIA frame of ${data.size} bytes (over 64 KB wire limit)")
+            return false
+        }
+        val sock = connectionTracker.getSocketForPeer(peerID)
+        if (sock == null) return false
+        return try {
+            sock.write(data)
+            true
+        } catch (e: IOException) {
+            Log.e(TAG, "TX: call media write to ${peerID.take(8)} failed: ${e.message}")
+            false
+        }
+    }
+
+    override fun isPeerCallCapable(peerID: String): Boolean =
+        connectionTracker.getSocketForPeer(peerID) != null
+
     /**
      * Broadcasts a file (TLV payload) to all peers. Uses protocol version 2 to support
      * large payloads and generates a deterministic transferId (sha256 of payload) for UI/state.

@@ -530,6 +530,19 @@ class BluetoothMeshService(private val context: Context) : TransportBridgeServic
             override fun onVerifyResponseReceived(peerID: String, payload: ByteArray, timestampMs: Long) {
                 delegate?.didReceiveVerifyResponse(peerID, payload, timestampMs)
             }
+
+            override fun onCallSignalReceived(
+                peerID: String,
+                signalType: NoisePayloadType,
+                payload: ByteArray,
+                timestampMs: Long
+            ) {
+                delegate?.didReceiveCallSignal(peerID, signalType, payload, timestampMs)
+            }
+
+            override fun onCallMediaReceived(peerID: String, payload: ByteArray) {
+                delegate?.didReceiveCallMedia(peerID, payload)
+            }
         }
         
         // PacketProcessor delegates
@@ -561,6 +574,10 @@ class BluetoothMeshService(private val context: Context) : TransportBridgeServic
             
             override fun handleNoiseEncrypted(routed: RoutedPacket): Boolean {
                 return runBlocking { messageHandler.handleNoiseEncrypted(routed) }
+            }
+
+            override fun handleCallMedia(routed: RoutedPacket): Boolean {
+                return runBlocking { messageHandler.handleCallMedia(routed) }
             }
             
             override suspend fun handleAnnounce(routed: RoutedPacket): Boolean {
@@ -1155,6 +1172,17 @@ class BluetoothMeshService(private val context: Context) : TransportBridgeServic
         )
         sendNoisePayloadToPeer(payload, peerID, "verify response")
     }
+
+    /**
+     * Send a real-time call control signal over BLE (used only as a routing fallback;
+     * real-time media itself requires Wi-Fi).
+     */
+    fun sendCallSignal(peerID: String, signalType: NoisePayloadType, payload: ByteArray) {
+        sendNoisePayloadToPeer(NoisePayload(signalType, payload), peerID, "call signal ${signalType.name}")
+    }
+
+    /** BLE is far too slow for real-time media; calls never send frames over it. */
+    fun sendCallMedia(peerID: String, frame: ByteArray): Boolean = false
 
     private fun sendNoisePayloadToPeer(payload: NoisePayload, recipientPeerID: String, label: String) {
         serviceScope.launch {

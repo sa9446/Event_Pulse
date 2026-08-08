@@ -1443,6 +1443,19 @@ class ChatViewModel(
         verificationHandler.didReceiveVerifyResponse(peerID, payload)
     }
 
+    override fun didReceiveCallSignal(
+        peerID: String,
+        signalType: com.bitchat.android.model.NoisePayloadType,
+        payload: ByteArray,
+        timestampMs: Long
+    ) {
+        com.bitchat.android.calls.CallManager.handleSignal(signalType, peerID, payload)
+    }
+
+    override fun didReceiveCallMedia(peerID: String, payload: ByteArray) {
+        com.bitchat.android.calls.CallManager.handleMedia(peerID, payload)
+    }
+
     override fun didResolvePrivateMediaPolicy(peerID: String) {
         mediaSendingManager.retryPendingPrivateMedia(peerID)
     }

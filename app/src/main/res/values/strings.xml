@@ -638,4 +638,22 @@
   <string name="about_app_language">App language</string>
   <string name="about_system_default">System default</string>
   <string name="about_select_language">Select language</string>
+    <!-- Real-time calls (voice/video over Wi-Fi mesh) -->
+    <string name="cd_voice_call">Voice call</string>
+    <string name="cd_video_call">Video call</string>
+    <string name="call_calling">Calling over Wi-Fi mesh…</string>
+    <string name="call_incoming_voice">Incoming voice call…</string>
+    <string name="call_incoming_video">Incoming video call…</string>
+    <string name="call_end">End</string>
+    <string name="call_accept">Accept</string>
+    <string name="call_decline">Decline</string>
+    <string name="call_mute">Mute</string>
+    <string name="call_unmute">Unmute</string>
+    <string name="call_no_wifi">Calling needs a Wi-Fi link — this peer is only reachable over Bluetooth</string>
+    <string name="call_already_in_progress">A call is already in progress</string>
+    <string name="call_no_answer">No answer</string>
+    <string name="call_declined">Call declined</string>
+    <string name="call_ended">Call ended</string>
+    <string name="call_cancelled">Call cancelled</string>
+    <string name="call_missed">Missed call from %1$s</string>
 </resources>

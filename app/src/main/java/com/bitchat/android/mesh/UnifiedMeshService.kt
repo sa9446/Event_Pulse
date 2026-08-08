@@ -208,6 +208,43 @@ class UnifiedMeshService(
         }
     }
 
+    override fun sendCallSignal(
+        peerID: String,
+        signalType: com.bitchat.android.model.NoisePayloadType,
+        payload: ByteArray
+    ) {
+        // Control signals ride the same encrypted Noise payload path as verify messages;
+        // Wi-Fi first for latency, BLE as a routing fallback (media itself never uses BLE).
+        when {
+            isWifiReady(peerID) -> wifiService()?.sendCallSignal(peerID, signalType, payload)
+            isP2pReady(peerID) -> p2pService()?.sendCallSignal(peerID, signalType, payload)
+            isBleReady(peerID) -> bluetooth.sendCallSignal(peerID, signalType, payload)
+            isWifiConnected(peerID) -> wifiService()?.sendCallSignal(peerID, signalType, payload)
+            isP2pConnected(peerID) -> p2pService()?.sendCallSignal(peerID, signalType, payload)
+            isBleConnected(peerID) || (isBleEnabled() && !isAnyWifiConnected(peerID)) ->
+                bluetooth.sendCallSignal(peerID, signalType, payload)
+            else -> {
+                val viaFirstHop = firstHopTransportFor(peerID)
+                if (viaFirstHop != null) {
+                    viaFirstHop.sendCallSignal(peerID, signalType, payload)
+                } else if (isBleEnabled()) {
+                    try { bluetooth.sendCallSignal(peerID, signalType, payload) } catch (_: Exception) { }
+                }
+            }
+        }
+    }
+
+    override fun sendCallMedia(peerID: String, frame: ByteArray): Boolean {
+        // Real-time media is Wi-Fi-only: the high-bandwidth direct socket is what makes the
+        // call viable, and CALL_MEDIA frames are written unfragmented straight to it.
+        if (isWifiConnected(peerID)) return wifiService()?.sendCallMedia(peerID, frame) == true
+        if (isP2pConnected(peerID)) return p2pService()?.sendCallMedia(peerID, frame) == true
+        return false
+    }
+
+    override fun isPeerCallCapable(peerID: String): Boolean =
+        isWifiConnected(peerID) || isP2pConnected(peerID)
+
     override fun sendFileBroadcast(file: BitchatFilePacket) {
         // Media prefers the high-bandwidth Wi-Fi paths when any Wi-Fi peers are present;
         // BLE remains the fallback (and the only option when Wi-Fi is off).
@@ -572,6 +609,19 @@ class UnifiedMeshService(
 
     override fun didReceiveVerifyResponse(peerID: String, payload: ByteArray, timestampMs: Long) {
         delegate?.didReceiveVerifyResponse(peerID, payload, timestampMs)
+    }
+
+    override fun didReceiveCallSignal(
+        peerID: String,
+        signalType: com.bitchat.android.model.NoisePayloadType,
+        payload: ByteArray,
+        timestampMs: Long
+    ) {
+        delegate?.didReceiveCallSignal(peerID, signalType, payload, timestampMs)
+    }
+
+    override fun didReceiveCallMedia(peerID: String, payload: ByteArray) {
+        delegate?.didReceiveCallMedia(peerID, payload)
     }
 
     override fun didResolvePrivateMediaPolicy(peerID: String) {

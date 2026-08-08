@@ -146,6 +146,7 @@ class PacketProcessor(private val myPeerID: String) {
                         MessageType.NOISE_HANDSHAKE -> validPacket = handleNoiseHandshake(routed)
                         MessageType.NOISE_ENCRYPTED -> validPacket = handleNoiseEncrypted(routed)
                         MessageType.FILE_TRANSFER -> handleMessage(routed)
+                        MessageType.CALL_MEDIA -> validPacket = handleCallMedia(routed)
                         else -> {
                             validPacket = false
                             Log.w(TAG, "Unknown message type: ${packet.type}")
@@ -179,6 +180,13 @@ class PacketProcessor(private val myPeerID: String) {
      */
     private suspend fun handleNoiseEncrypted(routed: RoutedPacket): Boolean {
         return delegate?.handleNoiseEncrypted(routed) ?: false
+    }
+
+    /**
+     * Handle real-time call media frame (addressed CALL_MEDIA packet).
+     */
+    private suspend fun handleCallMedia(routed: RoutedPacket): Boolean {
+        return delegate?.handleCallMedia(routed) ?: false
     }
     
     /**
@@ -294,6 +302,7 @@ interface PacketProcessorDelegate {
     // Message type handlers
     fun handleNoiseHandshake(routed: RoutedPacket): Boolean
     fun handleNoiseEncrypted(routed: RoutedPacket): Boolean
+    fun handleCallMedia(routed: RoutedPacket): Boolean = false
     suspend fun handleAnnounce(routed: RoutedPacket): Boolean
     fun handleMessage(routed: RoutedPacket)
     fun handleLeave(routed: RoutedPacket)

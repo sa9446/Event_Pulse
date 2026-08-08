@@ -8,6 +8,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -124,6 +125,8 @@ class MainActivity : OrientationAwareActivity() {
         startMeshForegroundServiceBestEffort()
         meshService = com.bitchat.android.service.MeshServiceHolder.getOrCreate(applicationContext)
         unifiedMeshService = com.bitchat.android.service.MeshServiceHolder.getUnifiedOrCreate(applicationContext)
+        // Real-time calls (voice/video over Wi-Fi) are coordinated process-wide.
+        com.bitchat.android.calls.CallManager.initialize(applicationContext, unifiedMeshService)
         // Expose BLE mesh to Wi‑Fi Aware controller for cross-transport relays - DEPRECATED
         // Bridging is now handled by TransportBridgeService automatically
         
@@ -345,7 +348,12 @@ class MainActivity : OrientationAwareActivity() {
 
                 // Add the callback - this will be automatically removed when the activity is destroyed
                 onBackPressedDispatcher.addCallback(this, backCallback)
-                ChatScreen(viewModel = chatViewModel)
+                Box(modifier = Modifier.fillMaxSize()) {
+                    ChatScreen(viewModel = chatViewModel)
+                    // Full-screen call overlay (dialing / incoming / active call). Renders nothing
+                    // while no call is in progress.
+                    com.bitchat.android.calls.CallOverlay(modifier = Modifier.fillMaxSize())
+                }
             }
             
             OnboardingState.ERROR -> {
